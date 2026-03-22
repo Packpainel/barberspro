@@ -1,0 +1,24 @@
+# Banco de dados local
+*.db
+*.sqlite3
+
+# Chave secreta da sessão (MUITO IMPORTANTE não subir pro GitHub)
+.secret_key
+
+# Ambientes virtuais Python
+venv/
+env/
+.env
+.venv/
+
+# Arquivos compilados do Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Mac OS
+.DS_Store
+
+# Cloudflare Tunnel
+tunnel.log
+cloudflared.exe

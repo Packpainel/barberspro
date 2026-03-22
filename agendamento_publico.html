@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Agendar — {{ barbearia.nome }}</title>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;800&family=Inter:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/style.css" />
+  <style>
+    body { padding:20px; text-align:center; max-width:500px; margin:0 auto; background:#111; color:#fff; min-height:100vh }
+    .header-logo { font-size:3.5rem; margin-bottom:10px; margin-top: 20px;}
+    .shop-name { font-size:1.8rem; font-weight:800; color:var(--gold); margin-bottom:20px; text-transform:uppercase; letter-spacing:1px; }
+    .slot-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(75px,1fr)); gap:10px; margin-top:10px; }
+    .slot { padding:12px 0; border:1px solid #333; border-radius:8px; cursor:pointer; background:#222; font-weight:600; text-align:center; transition:.2s; font-size:0.95rem; user-select:none }
+    .slot:hover { border-color:var(--gold); }
+    .slot.active { background:var(--gold); color:#000; border-color:var(--gold); transform:scale(1.05); }
+    .chip { flex: 1; text-align:center; justify-content:center }
+  </style>
+</head>
+<body>
+  <div class="header-logo">✂️</div>
+  <div class="shop-name">{{ barbearia.nome }}</div>
+  
+  <div class="section-card" style="text-align:left; padding:24px">
+    <div class="section-header" style="text-align:center; font-size:1.3rem; margin-bottom:24px">Agende seu Horário</div>
+    
+    <form id="form-publico">
+      <input type="hidden" id="codigo" value="{{ barbearia.codigo }}" />
+      <input type="hidden" id="hora-sel" />
+      <input type="hidden" id="servico-sel" value="Corte" />
+      <input type="hidden" id="barbeiro-sel" />
+
+      <div class="form-group">
+        <label class="form-label" style="text-align:center; display:block">Com quem deseja cortar?</label>
+        <div class="chip-group" id="barbeiros" style="display:flex; gap:10px; flex-wrap:wrap; justify-content:center">
+          {% for barb in barbeiros %}
+          <button type="button" class="chip" data-id="{{ barb.id }}" style="flex:auto;min-width:100px">{{ barb.nome.split()[0] }}</button>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="form-group" style="margin-top:24px">
+        <label class="form-label" style="text-align:center; display:block">Qual será o serviço?</label>
+        <div class="chip-group" id="servicos" style="display:flex; gap:10px">
+          <button type="button" class="chip active" data-servico="Corte">✂️ Corte</button>
+          <button type="button" class="chip" data-servico="Barba">🪒 Barba</button>
+          <button type="button" class="chip" data-servico="Corte + Barba">✂️+🪒 Duplo</button>
+        </div>
+      </div>
+
+      <div class="form-group" style="margin-top:24px">
+        <label class="form-label">Para qual data?</label>
+        <input type="date" id="data-agend" class="form-control" style="font-size:1.1rem; padding:12px" required />
+      </div>
+
+      <div class="form-group" style="margin-top:24px">
+        <label class="form-label">Escolha um horário livre:</label>
+        <div id="slots-container" class="slot-grid">
+          <div style="font-size:0.9rem;color:#888;grid-column:1/-1;text-align:center">Selecione uma data acima...</div>
+        </div>
+      </div>
+
+      <div style="border-top:1px solid #333; margin:30px 0; padding-top:20px">
+        <div class="form-group">
+          <label class="form-label">Seu Nome Completo</label>
+          <input type="text" id="cli-nome" class="form-control" required />
+        </div>
+        
+        <div class="form-group">
+          <label class="form-label">WhatsApp (pra gente confirmar)</label>
+          <input type="tel" id="cli-tel" class="form-control" placeholder="(00) 00000-0000" required />
+        </div>
+      </div>
+
+      <button type="submit" id="btn-submit" class="btn btn-gold btn-full" style="padding:18px; font-size:1.1rem" disabled>
+        Confirmar Agendamento
+      </button>
+    </form>
+  </div>
+
+  <div id="success-screen" style="display:none; padding:40px 20px; animation: popIn 0.5s ease out">
+    <div style="font-size:5rem;margin-bottom:20px">✅</div>
+    <h2 style="color:var(--gold); font-size:2rem; margin-bottom:10px">Prontinho!</h2>
+    <p style="font-size:1.1rem; color:#ccc; line-height:1.6">Seu horário foi reservado com sucesso.<br><br>Te esperamos lá na barbearia! Qualquer problema, avise a equipe pra liberar a vaga.</p>
+  </div>
+
+  <script>
+    const cod = document.getElementById('codigo').value;
+    const inpData = document.getElementById('data-agend');
+    const contSlots = document.getElementById('slots-container');
+    const btnSubmit = document.getElementById('btn-submit');
+    const hHora = document.getElementById('hora-sel');
+    const hServico = document.getElementById('servico-sel');
+    const hBarbeiro = document.getElementById('barbeiro-sel');
+
+    // Init constraints
+    const hoje = new Date();
+    const todayStr = new Date(hoje.getTime() - (hoje.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+    inpData.min = todayStr;
+    inpData.value = todayStr;
+
+    // Chips Serviço
+    document.querySelectorAll('#servicos .chip').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('#servicos .chip').forEach(c => c.classList.remove('active'));
+        btn.classList.add('active');
+        hServico.value = btn.dataset.servico;
+      });
+    });
+
+    // Chips Barbeiros
+    document.querySelectorAll('#barbeiros .chip').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('#barbeiros .chip').forEach(c => c.classList.remove('active'));
+        btn.classList.add('active');
+        hBarbeiro.value = btn.dataset.id;
+        loadHorarios();
+      });
+    });
+
+    // Pré-selecionar o primeiro barbeiro
+    const firstBarber = document.querySelector('#barbeiros .chip');
+    if (firstBarber) firstBarber.click();
+
+    async function loadHorarios() {
+      const d = inpData.value;
+      const bId = hBarbeiro.value;
+      if (!d || !bId) {
+        contSlots.innerHTML = '<div style="color:#aaa;grid-column:1/-1;text-align:center;padding:20px">Selecione um barbeiro e data...</div>';
+        return;
+      }
+      contSlots.innerHTML = '<div style="color:#aaa;grid-column:1/-1;text-align:center;padding:20px">Pesquisando agenda...</div>';
+      btnSubmit.disabled = true;
+      hHora.value = '';
+
+      try {
+        const res = await fetch(`/api/public/horarios?codigo=${cod}&data=${d}&barbeiro_id=${bId}`);
+        const slots = await res.json();
+        
+        if(!slots || !slots.length) {
+          contSlots.innerHTML = '<div style="color:var(--danger);grid-column:1/-1;text-align:center;padding:20px">Nenhuma vaga livre neste dia 😢.</div>';
+          return;
+        }
+
+        contSlots.innerHTML = slots.map(h => `<div class="slot" data-h="${h}">${h}</div>`).join('');
+        
+        document.querySelectorAll('.slot').forEach(el => {
+          el.addEventListener('click', () => {
+            document.querySelectorAll('.slot').forEach(s => s.classList.remove('active'));
+            el.classList.add('active');
+            hHora.value = el.dataset.h;
+            btnSubmit.disabled = false;
+          });
+        });
+      } catch(e) {
+        contSlots.innerHTML = '<div style="color:var(--danger);grid-column:1/-1;text-align:center">Erro de rede.</div>';
+      }
+    }
+
+    inpData.addEventListener('change', loadHorarios);
+    loadHorarios();
+
+    // Submit
+    document.getElementById('form-publico').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if(!hHora.value) return alert('Selecione um horário!');
+      
+      btnSubmit.disabled = true;
+      btnSubmit.textContent = 'Reservando horário...';
+
+      try {
+        const res = await fetch('/api/public/agendar', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            codigo: cod,
+            barbeiro_id: hBarbeiro.value,
+            nome: document.getElementById('cli-nome').value,
+            telefone: document.getElementById('cli-tel').value,
+            servico: hServico.value,
+            data: inpData.value,
+            hora: hHora.value
+          })
+        });
+        const result = await res.json();
+        if(result.ok) {
+          document.querySelector('.section-card').style.display = 'none';
+          document.querySelector('.header-logo').style.display = 'none';
+          document.querySelector('.shop-name').style.display = 'none';
+          document.getElementById('success-screen').style.display = 'block';
+        } else {
+          alert(result.erro || 'Erro ao agendar.');
+          btnSubmit.disabled = false;
+          btnSubmit.textContent = 'Confirmar Agendamento';
+        }
+      } catch(e) {
+        alert('Erro de conexão com a barbearia.');
+        btnSubmit.disabled = false;
+        btnSubmit.textContent = 'Confirmar Agendamento';
+      }
+    });
+
+    // Simple Mask for phone
+    document.getElementById('cli-tel').addEventListener('input', function (e) {
+      let x = e.target.value.replace(/\D/g, '').match(/(\d{0,2})(\d{0,5})(\d{0,4})/);
+      e.target.value = !x[2] ? x[1] : '(' + x[1] + ') ' + x[2] + (x[3] ? '-' + x[3] : '');
+    });
+  </script>
+</body>
+</html>

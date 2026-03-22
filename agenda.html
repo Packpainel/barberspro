@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Agenda — BarberPro{% endblock %}
+
+{% block content %}
+<div class="page-title">
+  <span class="title-icon">📅</span>
+  Agenda do Dia
+</div>
+
+<div class="section-card">
+  <div class="section-header" style="display:flex; justify-content:space-between; align-items:center">
+    <span>Compromissos</span>
+    <input type="date" id="data-agenda" class="form-control" style="width:auto; padding:6px 12px; font-size:1rem; margin:0" />
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Hora</th>
+          <th>Cliente</th>
+          <th>Serviço / Barbeiro</th>
+          <th>Status</th>
+          <th>Ação</th>
+        </tr>
+      </thead>
+      <tbody id="tbody-agenda">
+        <tr><td colspan="5" class="loading-overlay"><span class="spinner"></span></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

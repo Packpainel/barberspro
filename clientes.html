@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Clientes — BarberPro{% endblock %}
+
+{% block content %}
+<div class="page-title">
+  <span class="title-icon">👤</span>
+  Clientes
+</div>
+
+<!-- Cadastro de novo cliente -->
+<div class="section-card">
+  <div class="section-header">➕ Novo Cliente</div>
+  <div style="padding:18px">
+    <form id="form-cliente" autocomplete="off">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label" for="nome">Nome *</label>
+          <input class="form-control" type="text" id="nome" name="nome"
+                 placeholder="Ex: João Silva" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="telefone">Telefone</label>
+          <input class="form-control" type="tel" id="telefone" name="telefone"
+                 placeholder="(11) 99999-9999" />
+        </div>
+      </div>
+      <button id="btn-salvar-cliente" class="btn btn-gold btn-full" type="submit">
+        Salvar Cliente
+      </button>
+    </form>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- Lista de clientes -->
+<div class="page-title" style="font-size:1rem;margin-bottom:12px">
+  📋 Lista de Clientes
+</div>
+
+<div class="search-wrap">
+  <span class="search-icon">🔍</span>
+  <input class="form-control" type="text" id="search-cliente"
+         placeholder="Buscar por nome…" />
+</div>
+
+<div class="section-card">
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Nome</th>
+          <th>Telefone</th>
+          <th>Última Visita</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody id="tbody-clientes">
+        <tr>
+          <td colspan="4" class="loading-overlay">
+            <span class="spinner"></span>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

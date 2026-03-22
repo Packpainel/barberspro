@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+{% block title %}Equipe — {{ current_user.barbearia_nome }}{% endblock %}
+
+{% block content %}
+<div class="page-title">
+  <span class="title-icon">👥</span>
+  Equipe / Barbeiros
+</div>
+
+<!-- Invite Code Info -->
+<div class="alert-success" style="margin-bottom:24px; display:flex; align-items:center; justify-content:space-between">
+  <div>
+    <strong>Código da Barbearia:</strong> <span style="font-family:monospace; font-size:1.1rem; letter-spacing:1px; background:rgba(0,0,0,0.1); padding:2px 6px; border-radius:4px">{{ current_user.barbearia_codigo }}</span>
+    <div style="font-size:0.8rem; margin-top:4px">Compartilhe este código para que novos barbeiros possam se cadastrar na sua equipe.</div>
+  </div>
+</div>
+
+<!-- Add barber form -->
+<div class="section-card">
+  <div class="section-header">➕ Adicionar Barbeiro</div>
+  <div style="padding:18px">
+    <form id="form-barbeiro" autocomplete="off">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label" for="b-nome">Nome *</label>
+          <input class="form-control" type="text" id="b-nome" placeholder="Nome completo" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="b-email">E-mail *</label>
+          <input class="form-control" type="email" id="b-email" placeholder="email@email.com" required />
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label" for="b-senha">Senha *</label>
+          <input class="form-control" type="password" id="b-senha" placeholder="Mín. 6 caracteres" required minlength="6" />
+        </div>
+        <div class="form-group" style="display:flex;align-items:flex-end;padding-bottom:2px">
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:.85rem;color:var(--text-muted)">
+            <input type="checkbox" id="b-admin" style="width:18px;height:18px;accent-color:var(--gold)" />
+            É administrador?
+          </label>
+        </div>
+      </div>
+      <button id="btn-add-barbeiro" class="btn btn-gold btn-full" type="submit">
+        Adicionar Barbeiro
+      </button>
+    </form>
+  </div>
+</div>
+
+<!-- Barbers list -->
+<div class="section-card">
+  <div class="section-header">👤 Barbeiros Cadastrados</div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Nome</th>
+          <th>E-mail</th>
+          <th>Tipo</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="tbody-barbeiros">
+        <tr><td colspan="4" class="loading-overlay"><span class="spinner"></span></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const ME_ID = {{ current_user.id }};
+
+async function loadBarbeiros() {
+  const tbody = document.getElementById('tbody-barbeiros');
+  try {
+    const lista = await apiFetch('/api/admin/barbeiros');
+    if (!lista.length) {
+      tbody.innerHTML = `<tr><td colspan="4" class="empty-state">Nenhum barbeiro cadastrado</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = lista.map(b => `
+      <tr>
+        <td><strong>${esc(b.nome)}</strong></td>
+        <td style="color:var(--text-muted);font-size:.85rem">${esc(b.email)}</td>
+        <td>
+          ${b.is_admin
+            ? '<span class="badge badge-gold">Admin</span>'
+            : '<span class="badge badge-success">Barbeiro</span>'}
+          ${!b.ativo ? '<span class="badge badge-danger" style="margin-left:4px">Inativo</span>' : ''}
+        </td>
+        <td style="text-align:right">
+          ${b.id !== ME_ID && b.ativo ? `
+            <button class="btn btn-danger btn-sm" onclick="removerBarbeiro(${b.id},'${esc(b.nome)}')">
+              Remover
+            </button>` : '—'}
+        </td>
+      </tr>`).join('');
+  } catch(e) {
+    showToast('Erro ao carregar barbeiros', 'error');
+  }
+}
+
+async function removerBarbeiro(id, nome) {
+  if (!confirm(`Remover "${nome}"? O acesso será desativado.`)) return;
+  try {
+    await apiFetch(`/api/admin/barbeiros/${id}`, { method: 'DELETE' });
+    showToast(`${nome} removido com sucesso`, 'success');
+    loadBarbeiros();
+  } catch(e) {
+    showToast(e.message, 'error');
+  }
+}
+
+document.getElementById('form-barbeiro').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  const btn = document.getElementById('btn-add-barbeiro');
+  btn.disabled = true;
+  btn.textContent = 'Salvando…';
+  try {
+    await apiFetch('/api/admin/barbeiros', {
+      method: 'POST',
+      body: JSON.stringify({
+        nome:     document.getElementById('b-nome').value.trim(),
+        email:    document.getElementById('b-email').value.trim(),
+        senha:    document.getElementById('b-senha').value,
+        is_admin: document.getElementById('b-admin').checked
+      })
+    });
+    showToast('Barbeiro adicionado com sucesso!', 'success');
+    e.target.reset();
+    loadBarbeiros();
+  } catch(err) {
+    showToast(err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Adicionar Barbeiro';
+  }
+});
+
+document.addEventListener('DOMContentLoaded', loadBarbeiros);
+</script>
+{% endblock %}

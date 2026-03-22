@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Novo Serviço — BarberPro{% endblock %}
+
+{% block content %}
+<div class="page-title">
+  <span class="title-icon">✂️</span>
+  Registrar Serviço
+</div>
+
+<div class="section-card" style="max-width:600px; margin:0 auto">
+  <div class="section-header">➕ Novo Atendimento</div>
+  <div style="padding:18px">
+    <form id="form-atendimento" autocomplete="off">
+      <div class="form-group">
+        <label class="form-label" for="cliente-sel">Cliente *</label>
+        <select class="form-control" id="cliente-sel" required>
+          <option value="">Carregando…</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Serviço *</label>
+        <div class="chip-group">
+          <button type="button" class="chip" data-servico="Corte">✂️ Corte</button>
+          <button type="button" class="chip" data-servico="Barba">🪒 Barba</button>
+          <button type="button" class="chip" data-servico="Corte + Barba">✂️🪒 Corte + Barba</button>
+          <button type="button" class="chip" data-servico="Sobrancelha">✏️ Sobrancelha</button>
+        </div>
+        <input type="hidden" id="servico-hidden" name="servico" />
+      </div>
+
+      <div class="form-row">
+        <div class="form-group" style="flex:1">
+          <label class="form-label" for="valor">Valor (R$) *</label>
+          <input class="form-control" type="number" id="valor" name="valor"
+                 placeholder="0,00" min="0" step="0.01" required />
+        </div>
+        <div class="form-group" style="flex:1">
+          <label class="form-label" for="data-atend">Data</label>
+          <input class="form-control" type="date" id="data-atend" name="data" required />
+        </div>
+        <div class="form-group" style="flex:1">
+          <label class="form-label" for="hora-atend">Hora</label>
+          <input class="form-control" type="time" id="hora-atend" name="hora" required />
+        </div>
+      </div>
+
+      <button id="btn-salvar-atend" class="btn btn-gold btn-full" type="submit"
+              style="margin-top:8px;padding:16px">
+        ✅ Registrar na Agenda
+      </button>
+      <div style="margin-top:16px;text-align:center">
+        <a href="/clientes" class="btn btn-outline btn-sm">➕ Cadastrar Novo Cliente</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

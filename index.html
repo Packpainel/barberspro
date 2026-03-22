@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — BarberPro{% endblock %}
+
+{% block content %}
+<div class="page-title">
+  <span class="title-icon">📊</span>
+  Dashboard
+</div>
+
+<!-- Link de Agendamento -->
+<div class="alert-success" style="margin:0 0 24px 0; text-align:center; padding:20px; border-radius:12px; background:rgba(212,175,55,0.1); border:1px solid var(--gold)">
+  <div style="font-size:1.1rem; margin-bottom:8px">📱 Receba Agendamentos Automáticos</div>
+  <div style="font-size:0.9rem; color:#ccc; margin-bottom:12px">Coloque seu link na bio do Instagram ou envie para os clientes no WhatsApp:</div>
+  <a href="/b/{{ current_user.barbearia_codigo }}" target="_blank" style="font-size:1.1rem; font-weight:bold; color:var(--gold); display:inline-block; background:rgba(0,0,0,0.4); padding:10px 16px; border-radius:8px; text-decoration:none; letter-spacing:0.5px">
+    /b/{{ current_user.barbearia_codigo }}
+  </a>
+</div>
+
+<!-- KPI grid -->
+<div class="kpi-grid">
+  <div class="kpi-card gold" style="animation-delay:.0s">
+    <div class="kpi-label">Faturamento do Mês</div>
+    <div class="kpi-value" id="kpi-faturamento"><span class="skeleton" style="width:80px"></span></div>
+    <span class="kpi-icon">💰</span>
+  </div>
+  <div class="kpi-card" style="animation-delay:.05s">
+    <div class="kpi-label">Atendimentos</div>
+    <div class="kpi-value" id="kpi-atendimentos"><span class="skeleton" style="width:40px"></span></div>
+    <span class="kpi-icon">✂️</span>
+  </div>
+  <div class="kpi-card green" style="animation-delay:.1s">
+    <div class="kpi-label">Clientes Ativos</div>
+    <div class="kpi-value" id="kpi-ativos"><span class="skeleton" style="width:40px"></span></div>
+    <span class="kpi-icon">✅</span>
+  </div>
+  <div class="kpi-card danger" style="animation-delay:.15s">
+    <div class="kpi-label">Inativos +30d</div>
+    <div class="kpi-value" id="kpi-inativos"><span class="skeleton" style="width:40px"></span></div>
+    <span class="kpi-icon">⚠️</span>
+  </div>
+</div>
+
+<!-- Clientes inativos -->
+<div class="section-card" style="animation-delay:.2s">
+  <div class="section-header">
+    ⚠️ Clientes que não voltam há 30+ dias
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Nome</th>
+          <th>Telefone</th>
+          <th>Ausência</th>
+        </tr>
+      </thead>
+      <tbody id="tbody-inativos">
+        <tr>
+          <td colspan="3" class="loading-overlay">
+            <span class="spinner"></span>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Quick actions -->
+<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:4px">
+  <a href="/novo-atendimento" class="btn btn-gold" style="flex:1;min-width:160px">
+    ✂️ Novo Atendimento
+  </a>
+  <a href="/clientes" class="btn btn-outline" style="flex:1;min-width:140px">
+    👤 Ver Clientes
+  </a>
+</div>
+{% endblock %}
