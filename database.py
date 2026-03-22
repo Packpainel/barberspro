@@ -12,9 +12,25 @@ try:
 except ImportError:
     HAS_PG = False
 
-# Configuração do Banco
 DATABASE_SQLITE = os.path.join(os.path.dirname(__file__), 'barbearia.db')
 DATABASE_URL = os.environ.get('DATABASE_URL') or os.environ.get('EXTERNAL_DATABASE_URL')
+
+if DATABASE_URL:
+    # Correção para URLs antigas do heroku/render que usam postgres:// em vez de postgresql://
+    if DATABASE_URL.startswith("postgres://"):
+        DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+    
+    # Render e outros serviços Gerenciados EXIGEM SSL.
+    # Se não houver sslmode na URL, nós forçamos.
+    if "sslmode=" not in DATABASE_URL:
+        if "?" in DATABASE_URL:
+            DATABASE_URL += "&sslmode=require"
+        else:
+            DATABASE_URL += "?sslmode=require"
+            
+    print(f"DEBUG: DATABASE_URL configurada (SSL forçado).")
+else:
+    print("DEBUG: DATABASE_URL NÃO detectada. Usando SQLite local.")
 
 class CursorWrapper:
     def __init__(self, cursor, is_pg):
@@ -28,7 +44,11 @@ class CursorWrapper:
             if sql.strip().upper().startswith('INSERT') and 'RETURNING' not in sql.upper():
                 sql += ' RETURNING id'
         
-        self.cursor.execute(sql, params)
+        try:
+            self.cursor.execute(sql, params)
+        except Exception as e:
+            print(f"SQL ERROR: {e}\nQUERY: {sql}\nPARAMS: {params}")
+            raise e
         
         if self.is_pg and sql.strip().upper().startswith('INSERT'):
             try:
@@ -79,15 +99,29 @@ class DBWrapper:
         return self.execute(sql, params).fetchall()
 
 def get_db():
-    if DATABASE_URL and HAS_PG:
-        conn = psycopg2.connect(DATABASE_URL)
-        conn.cursor_factory = psycopg2.extras.DictCursor
-        return DBWrapper(conn, True)
-    else:
-        conn = sqlite3.connect(DATABASE_SQLITE)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA foreign_keys = ON")
-        return DBWrapper(conn, False)
+    # Prioridade para Postgres se a URL estiver presente
+    if DATABASE_URL:
+        if not HAS_PG:
+            raise RuntimeError("ERRO: psycopg2 não instalado. Adicione 'psycopg2-binary' ao requirements.txt")
+        
+        try:
+            conn = psycopg2.connect(DATABASE_URL)
+            conn.cursor_factory = psycopg2.extras.DictCursor
+            return DBWrapper(conn, True)
+        except Exception as e:
+            # Captura o erro exato para mostrar no painel de status
+            error_msg = str(e)
+            print(f"\n!!! ERRO DE CONEXÃO COM POSTGRES !!!\n{error_msg}\n")
+            # Armazenamos o erro globalmente para a API de status ler
+            os.environ['LAST_DB_ERROR'] = error_msg
+            raise e
+    
+    # Se NÃO houver DATABASE_URL, assume-se modo desenvolvimento (SQLite)
+    print("AVISO: Usando SQLite local (DADOS SERÃO PERDIDOS NO RENDER).")
+    conn = sqlite3.connect(DATABASE_SQLITE)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    return DBWrapper(conn, False)
 
 def init_db():
     conn = get_db()
@@ -100,37 +134,34 @@ def init_db():
     
     if is_pg:
         # Funções de compatibilidade para PostgreSQL
+        cur.execute("CREATE OR REPLACE FUNCTION julianday(t timestamp) RETURNS float AS $$ SELECT extract(julian from t); $$ LANGUAGE SQL;")
+        cur.execute("CREATE OR REPLACE FUNCTION julianday(t date) RETURNS float AS $$ SELECT extract(julian from t); $$ LANGUAGE SQL;")
         cur.execute("""
-            CREATE OR REPLACE FUNCTION julianday(t timestamp) RETURNS float AS $$
-                SELECT extract(julian from t);
-            $$ LANGUAGE SQL;
-
-            CREATE OR REPLACE FUNCTION julianday(t date) RETURNS float AS $$
-                SELECT extract(julian from t);
-            $$ LANGUAGE SQL;
-
             CREATE OR REPLACE FUNCTION julianday(t text) RETURNS float AS $$
-                SELECT CASE 
-                    WHEN t = 'now' THEN extract(julian from current_timestamp) 
-                    ELSE extract(julian from t::timestamp) 
+                BEGIN
+                    IF t = 'now' THEN RETURN extract(julian from current_timestamp);
+                    ELSE RETURN extract(julian from t::timestamp);
+                    END IF;
                 END;
-            $$ LANGUAGE SQL;
+            $$ LANGUAGE plpgsql;
         """)
 
-        # Schema para PostgreSQL
+        # Schema para PostgreSQL (Executado um por um para evitar erros globais)
         cur.execute("""
             CREATE TABLE IF NOT EXISTS barbearias (
                 id          SERIAL PRIMARY KEY,
                 nome        TEXT    NOT NULL,
                 codigo      TEXT    NOT NULL UNIQUE,
                 criado_em   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-
+            )""")
+        
+        cur.execute("""
             CREATE TABLE IF NOT EXISTS config (
                 chave TEXT PRIMARY KEY,
                 valor TEXT NOT NULL
-            );
+            )""")
 
+        cur.execute("""
             CREATE TABLE IF NOT EXISTS usuarios (
                 id          SERIAL PRIMARY KEY,
                 barbearia_id INTEGER REFERENCES barbearias(id),
@@ -140,8 +171,9 @@ def init_db():
                 is_admin    INTEGER NOT NULL DEFAULT 0,
                 ativo       INTEGER NOT NULL DEFAULT 1,
                 criado_em   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
+            )""")
 
+        cur.execute("""
             CREATE TABLE IF NOT EXISTS clientes (
                 id          SERIAL PRIMARY KEY,
                 barbearia_id INTEGER REFERENCES barbearias(id),
@@ -149,8 +181,9 @@ def init_db():
                 telefone    TEXT,
                 ultima_visita DATE,
                 criado_em   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
+            )""")
 
+        cur.execute("""
             CREATE TABLE IF NOT EXISTS atendimentos (
                 id          SERIAL PRIMARY KEY,
                 barbearia_id INTEGER REFERENCES barbearias(id),
@@ -159,11 +192,10 @@ def init_db():
                 servico     TEXT    NOT NULL,
                 valor       NUMERIC NOT NULL,
                 data        DATE    NOT NULL DEFAULT CURRENT_DATE,
-                hora        TEXT    DEFAULT TO_CHAR(CURRENT_TIMESTAMP, 'HH24:MI'),
+                hora        TEXT,
                 status      TEXT    DEFAULT 'agendado',
                 criado_em   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-        """)
+            )""")
     else:
         # Schema para SQLite (Legado)
         cur.executescript("""

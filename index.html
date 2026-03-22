@@ -74,4 +74,25 @@
     👤 Ver Clientes
   </a>
 </div>
+
+<!-- Indicador de Banco de Dados (Apenas para debug visual) -->
+<div style="margin-top:24px; text-align:center; font-size:0.7rem; color:#666; opacity:0.8">
+  <span id="db-status-indicator">Verificando banco...</span>
+</div>
+
+<script>
+  fetch('/api/status')
+    .then(r => r.json())
+    .then(data => {
+      const el = document.getElementById('db-status-indicator');
+      if (data.database === 'ERRO DE CONEXÃO' || data.database.includes('SQLite')) {
+        el.style.color = '#ff4444';
+        el.style.fontWeight = 'bold';
+        el.innerHTML = '⚠️ Servidor: ' + data.database + (data.error ? '<br><small>Erro: ' + data.error + '</small>' : '');
+      } else {
+        el.style.color = '#44ff44';
+        el.innerText = '✅ Servidor: ' + data.database;
+      }
+    });
+</script>
 {% endblock %}

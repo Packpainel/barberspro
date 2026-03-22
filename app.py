@@ -11,7 +11,7 @@ from flask_login import (LoginManager, UserMixin, login_user,
                          logout_user, login_required, current_user)
 from werkzeug.security import generate_password_hash, check_password_hash
 
-from database import init_db, get_db
+from database import init_db, get_db, HAS_PG, DATABASE_URL
 
 # ─────────────────────────────────────────────
 # App setup
@@ -45,8 +45,13 @@ def serve_css():
 def serve_js():
     return send_from_directory('.', 'main.js')
 
-with app.app_context():
-    init_db()
+try:
+    with app.app_context():
+        init_db()
+except Exception as e:
+    print(f"FALHA NA INICIALIZAÇÃO DO BANCO: {e}")
+    # Não encerramos o processo aqui para permitir que o Render veja os logs, 
+    # mas o app provavelmente vai falhar nas requisições.
 
 
 # ─────────────────────────────────────────────
@@ -81,9 +86,41 @@ def load_user(user_id):
     return Usuario(row) if row else None
 
 
-# ─────────────────────────────────────────────
-# Helpers
-# ─────────────────────────────────────────────
+@app.route('/api/status')
+def api_status():
+    error = os.environ.get('LAST_DB_ERROR', '')
+    try:
+        db = get_db()
+        is_pg = db.is_pg
+        db.close()
+        return jsonify({
+            'database': 'PostgreSQL' if is_pg else 'SQLite (DADOS TEMPORÁRIOS)',
+            'has_pg_driver': HAS_PG,
+            'has_db_url': bool(DATABASE_URL),
+            'error': error
+        })
+    except Exception as e:
+        return jsonify({
+            'database': 'ERRO DE CONEXÃO',
+            'has_pg_driver': HAS_PG,
+            'has_db_url': bool(DATABASE_URL),
+            'error': str(e)
+        })
+
+# Decorador para logar erros no Render
+def log_errors(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        try:
+            return f(*args, **kwargs)
+        except Exception as e:
+            print(f"ERRO NA ROTA {request.path}: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'erro': str(e)}), 500
+    return decorated
+
+# Decorator para exigir admin
 def admin_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
@@ -301,6 +338,7 @@ def admin_barbeiros():
 # ─────────────────────────────────────────────
 @app.route('/api/dashboard')
 @login_required
+@log_errors
 def api_dashboard():
     db = get_db()
     b_id = current_user.barbearia_id
@@ -317,21 +355,21 @@ def api_dashboard():
     atendimentos_mes = row['qtd']
 
     ativos = db.execute(
-        "SELECT COUNT(*) AS c FROM clientes WHERE ultima_visita >= ? AND barbearia_id=?",
+        "SELECT COUNT(*) AS c FROM clientes WHERE CAST(ultima_visita AS DATE) >= CAST(? AS DATE) AND barbearia_id=CAST(? AS INTEGER)",
         (limite_inativo, b_id)
     ).fetchone()['c']
 
     inativos = db.execute(
         "SELECT COUNT(*) AS c FROM clientes "
-        "WHERE (ultima_visita < ? AND ultima_visita IS NOT NULL) AND barbearia_id=?",
+        "WHERE (CAST(ultima_visita AS DATE) < CAST(? AS DATE) AND ultima_visita IS NOT NULL) AND barbearia_id=CAST(? AS INTEGER)",
         (limite_inativo, b_id)
     ).fetchone()['c']
 
     lista_inativos = db.execute(
         """SELECT c.id, c.nome, c.telefone, c.ultima_visita,
-                  CAST(julianday('now') - julianday(c.ultima_visita) AS INTEGER) AS dias_ausente
+                  CAST(julianday('now') - julianday(CAST(c.ultima_visita AS TEXT)) AS INTEGER) AS dias_ausente
            FROM clientes c
-           WHERE (c.ultima_visita < ? AND c.ultima_visita IS NOT NULL) AND c.barbearia_id=?
+           WHERE (CAST(c.ultima_visita AS DATE) < CAST(? AS DATE) AND c.ultima_visita IS NOT NULL) AND c.barbearia_id=CAST(? AS INTEGER)
            ORDER BY dias_ausente DESC NULLS LAST
            LIMIT 20""",
         (limite_inativo, b_id)
@@ -352,6 +390,7 @@ def api_dashboard():
 # ─────────────────────────────────────────────
 @app.route('/api/clientes', methods=['GET', 'POST'])
 @login_required
+@log_errors
 def api_clientes():
     db = get_db()
     b_id = current_user.barbearia_id
@@ -375,8 +414,8 @@ def api_clientes():
     limite_inativo = (date.today() - timedelta(days=30)).isoformat()
     rows = db.execute(
         """SELECT id, nome, telefone, ultima_visita,
-                  CASE WHEN ultima_visita >= ? THEN 'ativo' ELSE 'inativo' END AS status
-           FROM clientes WHERE barbearia_id=? ORDER BY nome COLLATE NOCASE""",
+                  CASE WHEN CAST(ultima_visita AS DATE) >= CAST(? AS DATE) THEN 'ativo' ELSE 'inativo' END AS status
+           FROM clientes WHERE barbearia_id=CAST(? AS INTEGER) ORDER BY LOWER(nome)""",
         (limite_inativo, b_id)
     ).fetchall()
     db.close()
@@ -385,6 +424,7 @@ def api_clientes():
 
 @app.route('/api/clientes/<int:cid>', methods=['GET', 'PUT', 'DELETE'])
 @login_required
+@log_errors
 def api_cliente_detalhe(cid):
     db = get_db()
     b_id = current_user.barbearia_id
@@ -423,6 +463,7 @@ def api_cliente_detalhe(cid):
 # ─────────────────────────────────────────────
 @app.route('/api/atendimentos', methods=['GET', 'POST'])
 @login_required
+@log_errors
 def api_atendimentos():
     db = get_db()
     b_id = current_user.barbearia_id
@@ -521,8 +562,8 @@ def api_public_agendar():
     if row_c:
         cliente_id = row_c['id']
     else:
-        db.execute("INSERT INTO clientes (nome, telefone, barbearia_id) VALUES (?,?,?)", (nome, telefone, b_id))
-        cliente_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+        cur_c = db.execute("INSERT INTO clientes (nome, telefone, barbearia_id) VALUES (?,?,?)", (nome, telefone, b_id))
+        cliente_id = cur_c.lastrowid
 
     # Agendar
     db.execute(
@@ -539,6 +580,7 @@ def api_public_agendar():
 # ─────────────────────────────────────────────
 @app.route('/api/atendimentos/<int:atend_id>/concluir', methods=['POST'])
 @login_required
+@log_errors
 def api_atendimento_concluir(atend_id):
     data = request.json or {}
     valor = data.get('valor')
@@ -566,6 +608,7 @@ def api_atendimento_concluir(atend_id):
 # ─────────────────────────────────────────────
 @app.route('/api/atendimentos/dia')
 @login_required
+@log_errors
 def api_atendimentos_dia():
     db = get_db()
     b_id = current_user.barbearia_id
@@ -589,6 +632,7 @@ def api_atendimentos_dia():
 # ─────────────────────────────────────────────
 @app.route('/api/historico')
 @login_required
+@log_errors
 def api_historico():
     db = get_db()
     b_id = current_user.barbearia_id

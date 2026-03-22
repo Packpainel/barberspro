@@ -100,7 +100,7 @@ async function loadDashboard() {
       </tr>`;
     }).join('');
   } catch (e) {
-    showToast('Erro ao carregar dashboard', 'error');
+    showToast('Erro Dashboard: ' + e.message, 'error');
   }
 }
 
@@ -118,7 +118,7 @@ async function loadClientes() {
     allClientes = await apiFetch('/api/clientes');
     renderClientes(allClientes);
   } catch (e) {
-    showToast('Erro ao carregar clientes', 'error');
+    showToast('Erro Clientes: ' + e.message, 'error');
   }
 }
 
@@ -196,7 +196,7 @@ async function loadNovoAtendimento() {
     sel.innerHTML = '<option value="">— Selecione o cliente —</option>' +
       clientes.map(c => `<option value="${c.id}">${esc(c.nome)}</option>`).join('');
   } catch (e) {
-    showToast('Erro ao carregar clientes', 'error');
+    showToast('Erro Carregar: ' + e.message, 'error');
   }
 
   // Chips de serviço
@@ -294,7 +294,7 @@ async function loadAgenda(dataStr) {
       </tr>`;
     }).join('');
   } catch (e) {
-    showToast('Erro ao carregar agenda', 'error');
+    showToast('Erro Agenda: ' + e.message, 'error');
   }
 }
 
@@ -351,7 +351,7 @@ async function loadHistorico(inicio, fim) {
         <td style="color:var(--gold);font-weight:600">${formatBRL(a.valor)}</td>
       </tr>`).join('');
   } catch (e) {
-    showToast('Erro ao carregar histórico', 'error');
+    showToast('Erro Histórico: ' + e.message, 'error');
   }
 }
 
