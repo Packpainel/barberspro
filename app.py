@@ -375,13 +375,19 @@ def api_dashboard():
         (limite_inativo, b_id)
     ).fetchall()
 
-    db.close()
+    def format_row(r):
+        d = dict(r)
+        for k, v in d.items():
+            if v and hasattr(v, 'isoformat'):
+                d[k] = v.isoformat()
+        return d
+
     return jsonify({
         'faturamento_mes': faturamento_mes,
         'atendimentos_mes': atendimentos_mes,
         'clientes_ativos': ativos,
         'clientes_inativos': inativos,
-        'lista_inativos': [dict(r) for r in lista_inativos]
+        'lista_inativos': [format_row(r) for r in lista_inativos]
     })
 
 
@@ -418,8 +424,15 @@ def api_clientes():
            FROM clientes WHERE barbearia_id=CAST(? AS INTEGER) ORDER BY LOWER(nome)""",
         (limite_inativo, b_id)
     ).fetchall()
+    def format_cli(r):
+        d = dict(r)
+        for k, v in d.items():
+            if v and hasattr(v, 'isoformat'):
+                d[k] = v.isoformat()
+        return d
+    
     db.close()
-    return jsonify([dict(r) for r in rows])
+    return jsonify([format_cli(r) for r in rows])
 
 
 @app.route('/api/clientes/<int:cid>', methods=['GET', 'PUT', 'DELETE'])
@@ -504,8 +517,15 @@ def api_atendimentos():
            WHERE a.barbearia_id=?
            ORDER BY a.data DESC, a.hora DESC, a.id DESC LIMIT 100""", (b_id,)
     ).fetchall()
+    def format_atend(r):
+        d = dict(r)
+        for k, v in d.items():
+            if v and hasattr(v, 'isoformat'):
+                d[k] = v.isoformat()
+        return d
+
     db.close()
-    return jsonify([dict(r) for r in rows])
+    return jsonify([format_atend(r) for r in rows])
 
 # ─────────────────────────────────────────────
 # API — Agendamento Público (Self-Service)
@@ -623,8 +643,15 @@ def api_atendimentos_dia():
            WHERE a.barbearia_id=? AND a.data=?
            ORDER BY a.hora ASC, a.id ASC""", (b_id, dia)
     ).fetchall()
+    def format_dia(r):
+        d = dict(r)
+        for k, v in d.items():
+            if v and hasattr(v, 'isoformat'):
+                d[k] = v.isoformat()
+        return d
+
     db.close()
-    return jsonify([dict(r) for r in rows])
+    return jsonify([format_dia(r) for r in rows])
 
 
 # ─────────────────────────────────────────────
@@ -651,11 +678,18 @@ def api_historico():
     ).fetchall()
 
     total = sum(r['valor'] for r in rows)
+    def format_hist(r):
+        d = dict(r)
+        for k, v in d.items():
+            if v and hasattr(v, 'isoformat'):
+                d[k] = v.isoformat()
+        return d
+
     db.close()
     return jsonify({
-        'atendimentos': [dict(r) for r in rows],
         'total': total,
-        'quantidade': len(rows)
+        'quantidade': len(rows),
+        'atendimentos': [format_hist(r) for r in rows]
     })
 
 

@@ -403,3 +403,5 @@ document.addEventListener('DOMContentLoaded', () => {
     loadAgenda(agendaDate.value);
   }
 });
+
+console.log("App Version: 2.0 - Date fixes applied");
