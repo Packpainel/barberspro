@@ -348,52 +348,59 @@ def api_dashboard():
     inicio_mes = hoje.replace(day=1).isoformat()
     limite_inativo = (hoje - timedelta(days=30)).isoformat()
 
-    row = db.execute(
-        "SELECT COALESCE(SUM(valor),0) AS fat, COUNT(*) AS qtd "
-        "FROM atendimentos WHERE data >= ? AND barbearia_id=? AND status='concluido'",
-        (inicio_mes, b_id)
-    ).fetchone()
-    faturamento_mes = row['fat']
-    atendimentos_mes = row['qtd']
+    try:
+        row = db.execute(
+            "SELECT COALESCE(SUM(valor),0) AS fat, COUNT(*) AS qtd "
+            "FROM atendimentos WHERE data >= ? AND barbearia_id=? AND status='concluido'",
+            (inicio_mes, b_id)
+        ).fetchone()
+        faturamento_mes = row['fat']
+        atendimentos_mes = row['qtd']
 
-    # Ativos: Visitaram nos últimos 30 dias
-    ativos = db.execute(
-        "SELECT COUNT(*) AS c FROM clientes "
-        "WHERE barbearia_id=CAST(? AS INTEGER) AND CAST(ultima_visita AS DATE) >= CAST(? AS DATE)",
-        (b_id, limite_inativo)
-    ).fetchone()['c']
+        # Ativos: Visitaram nos últimos 30 dias
+        ativos = db.execute(
+            "SELECT COUNT(*) AS c FROM clientes "
+            "WHERE barbearia_id=? AND CAST(ultima_visita AS TEXT) >= ?",
+            (b_id, limite_inativo)
+        ).fetchone()['c']
 
-    # Inativos: Visitaram há mais de 30 dias OU nunca visitaram e o cadastro é antigo
-    inativos = db.execute(
-        "SELECT COUNT(*) AS c FROM clientes "
-        "WHERE barbearia_id=CAST(? AS INTEGER) AND ("
-        "  (CAST(ultima_visita AS DATE) < CAST(? AS DATE)) OR "
-        "  (ultima_visita IS NULL AND CAST(criado_em AS DATE) < CAST(? AS DATE))"
-        ")",
-        (b_id, limite_inativo, limite_inativo)
-    ).fetchone()['c']
+        # Inativos: Visitaram há mais de 30 dias OU nunca visitaram e o cadastro é antigo
+        inativos = db.execute(
+            "SELECT COUNT(*) AS c FROM clientes "
+            "WHERE barbearia_id=? AND ("
+            "  (CAST(ultima_visita AS TEXT) < ?) OR "
+            "  (ultima_visita IS NULL AND CAST(criado_em AS TEXT) < ?)"
+            ")",
+            (b_id, limite_inativo, limite_inativo)
+        ).fetchone()['c']
 
-    lista_inativos = db.execute(
-        """SELECT c.id, c.nome, c.telefone, c.ultima_visita,
-                  CASE 
-                    WHEN c.ultima_visita IS NOT NULL THEN CAST(julianday('now') - julianday(CAST(c.ultima_visita AS TEXT)) AS INTEGER)
-                    ELSE CAST(julianday('now') - julianday(CAST(c.criado_em AS TEXT)) AS INTEGER)
-                  END AS dias_ausente
-           FROM clientes c
-           WHERE c.barbearia_id=CAST(? AS INTEGER) AND (
-             (CAST(c.ultima_visita AS DATE) < CAST(? AS DATE)) OR
-             (c.ultima_visita IS NULL AND CAST(c.criado_em AS DATE) < CAST(? AS DATE))
-           )
-           ORDER BY dias_ausente DESC NULLS LAST
-           LIMIT 20""",
-        (b_id, limite_inativo, limite_inativo)
-    ).fetchall()
+        lista_inativos = db.execute(
+            """SELECT c.id, c.nome, c.telefone, c.ultima_visita,
+                      CASE 
+                        WHEN c.ultima_visita IS NOT NULL THEN CAST(julianday('now') - julianday(CAST(c.ultima_visita AS TEXT)) AS INTEGER)
+                        ELSE CAST(julianday('now') - julianday(CAST(c.criado_em AS TEXT)) AS INTEGER)
+                      END AS dias_ausente
+               FROM clientes c
+               WHERE c.barbearia_id=? AND (
+                 (CAST(c.ultima_visita AS TEXT) < ?) OR
+                 (c.ultima_visita IS NULL AND CAST(c.criado_em AS TEXT) < ?)
+               )
+               ORDER BY dias_ausente DESC
+               LIMIT 20""",
+            (b_id, limite_inativo, limite_inativo)
+        ).fetchall()
 
-    hoje = date.today().isoformat() # Moved and changed to isoformat()
-    cancelados_hoje = db.execute(
-        "SELECT COUNT(*) AS c FROM atendimentos WHERE status='cancelado' AND data=? AND barbearia_id=CAST(? AS INTEGER)",
-        (hoje, b_id)
-    ).fetchone()['c']
+        hoje_str = date.today().isoformat()
+        cancelados_hoje = db.execute(
+            "SELECT COUNT(*) AS c FROM atendimentos WHERE status='cancelado' AND data=? AND barbearia_id=?",
+            (hoje_str, b_id)
+        ).fetchone()['c']
+
+    except Exception as e:
+        db.close()
+        import traceback
+        traceback.print_exc()
+        return jsonify({'erro': f'Erro nas consultas do dashboard: {str(e)}'}), 500
 
     def format_row(r):
         d = dict(r)
@@ -402,6 +409,7 @@ def api_dashboard():
                 d[k] = v.isoformat()
         return d
 
+    db.close()
     return jsonify({
         'faturamento_mes': faturamento_mes,
         'atendimentos_mes': atendimentos_mes,
@@ -439,12 +447,19 @@ def api_clientes():
         return jsonify({'id': novo_id, 'nome': nome, 'telefone': telefone}), 201
 
     limite_inativo = (date.today() - timedelta(days=30)).isoformat()
-    rows = db.execute(
-        """SELECT id, nome, telefone, ultima_visita,
-                  CASE WHEN CAST(ultima_visita AS DATE) >= CAST(? AS DATE) THEN 'ativo' ELSE 'inativo' END AS status
-           FROM clientes WHERE barbearia_id=CAST(? AS INTEGER) ORDER BY LOWER(nome)""",
-        (limite_inativo, b_id)
-    ).fetchall()
+    try:
+        rows = db.execute(
+            """SELECT id, nome, telefone, ultima_visita,
+                      CASE WHEN CAST(ultima_visita AS TEXT) >= ? THEN 'ativo' ELSE 'inativo' END AS status
+               FROM clientes WHERE barbearia_id=? ORDER BY LOWER(nome)""",
+            (limite_inativo, b_id)
+        ).fetchall()
+    except Exception as e:
+        db.close()
+        import traceback
+        traceback.print_exc()
+        return jsonify({'erro': f'Erro na consulta clientes: {str(e)}'}), 500
+
     def format_cli(r):
         d = dict(r)
         for k, v in d.items():
