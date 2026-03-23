@@ -356,25 +356,37 @@ def api_dashboard():
     faturamento_mes = row['fat']
     atendimentos_mes = row['qtd']
 
+    # Ativos: Visitaram nos últimos 30 dias
     ativos = db.execute(
-        "SELECT COUNT(*) AS c FROM clientes WHERE CAST(ultima_visita AS DATE) >= CAST(? AS DATE) AND barbearia_id=CAST(? AS INTEGER)",
-        (limite_inativo, b_id)
+        "SELECT COUNT(*) AS c FROM clientes "
+        "WHERE barbearia_id=CAST(? AS INTEGER) AND CAST(ultima_visita AS DATE) >= CAST(? AS DATE)",
+        (b_id, limite_inativo)
     ).fetchone()['c']
 
+    # Inativos: Visitaram há mais de 30 dias OU nunca visitaram e o cadastro é antigo
     inativos = db.execute(
         "SELECT COUNT(*) AS c FROM clientes "
-        "WHERE (CAST(ultima_visita AS DATE) < CAST(? AS DATE) AND ultima_visita IS NOT NULL) AND barbearia_id=CAST(? AS INTEGER)",
-        (limite_inativo, b_id)
+        "WHERE barbearia_id=CAST(? AS INTEGER) AND ("
+        "  (CAST(ultima_visita AS DATE) < CAST(? AS DATE)) OR "
+        "  (ultima_visita IS NULL AND CAST(criado_em AS DATE) < CAST(? AS DATE))"
+        ")",
+        (b_id, limite_inativo, limite_inativo)
     ).fetchone()['c']
 
     lista_inativos = db.execute(
         """SELECT c.id, c.nome, c.telefone, c.ultima_visita,
-                  CAST(julianday('now') - julianday(CAST(c.ultima_visita AS TEXT)) AS INTEGER) AS dias_ausente
+                  CASE 
+                    WHEN c.ultima_visita IS NOT NULL THEN CAST(julianday('now') - julianday(CAST(c.ultima_visita AS TEXT)) AS INTEGER)
+                    ELSE CAST(julianday('now') - julianday(CAST(c.criado_em AS TEXT)) AS INTEGER)
+                  END AS dias_ausente
            FROM clientes c
-           WHERE (CAST(c.ultima_visita AS DATE) < CAST(? AS DATE) AND c.ultima_visita IS NOT NULL) AND c.barbearia_id=CAST(? AS INTEGER)
+           WHERE c.barbearia_id=CAST(? AS INTEGER) AND (
+             (CAST(c.ultima_visita AS DATE) < CAST(? AS DATE)) OR
+             (c.ultima_visita IS NULL AND CAST(c.criado_em AS DATE) < CAST(? AS DATE))
+           )
            ORDER BY dias_ausente DESC NULLS LAST
            LIMIT 20""",
-        (limite_inativo, b_id)
+        (b_id, limite_inativo, limite_inativo)
     ).fetchall()
 
     hoje = date.today().isoformat() # Moved and changed to isoformat()

@@ -1,3 +1,53 @@
+/* ── Custom Modals ────────────────────────────── */
+function showModal({ title, message, showInput = false, inputType = 'text', inputValue = '', confirmText = 'Confirmar', cancelText = 'Cancelar' }) {
+  return new Promise((resolve) => {
+    const modal = document.getElementById('customModal');
+    const titleEl = document.getElementById('modalTitle');
+    const msgEl = document.getElementById('modalMessage');
+    const inputEl = document.getElementById('modalInput');
+    const confirmBtn = document.getElementById('modalBtnConfirm');
+    const cancelBtn = document.getElementById('modalBtnCancel');
+
+    titleEl.textContent = title;
+    msgEl.textContent = message;
+    
+    if (showInput) {
+      inputEl.style.display = 'block';
+      inputEl.type = inputType;
+      inputEl.value = inputValue;
+    } else {
+      inputEl.style.display = 'none';
+    }
+
+    confirmBtn.textContent = confirmText;
+    cancelBtn.textContent = cancelText;
+
+    const cleanup = () => {
+      modal.classList.remove('active');
+      confirmBtn.onclick = null;
+      cancelBtn.onclick = null;
+    };
+
+    confirmBtn.onclick = () => {
+      const val = inputEl.value;
+      cleanup();
+      resolve(showInput ? val : true);
+    };
+
+    cancelBtn.onclick = () => {
+      cleanup();
+      resolve(showInput ? null : false);
+    };
+
+    modal.classList.add('active');
+    if (showInput) setTimeout(() => inputEl.focus(), 100);
+  });
+}
+
+const showAlert = (title, message) => showModal({ title, message, cancelText: 'OK', confirmText: 'OK' });
+const showConfirm = (title, message) => showModal({ title, message });
+const showPrompt = (title, message, defaultValue = '') => showModal({ title, message, showInput: true, inputValue: defaultValue });
+
 /* ── Toast container ─────────────────────────── */
 const toastContainer = (() => {
   const el = document.createElement('div');
@@ -308,12 +358,12 @@ async function loadAgenda(dataStr) {
 }
 
 window.concluirAtendimento = async function(id, dataStr) {
-  let valStr = prompt("Qual o valor final do serviço? (Ex: 40.00)", "0.00");
+  let valStr = await showPrompt("Concluir Atendimento", "Qual o valor final do serviço? (Ex: 40.00)", "0.00");
   if (valStr === null) return; // Operação cancelada
   
   let valor = parseFloat(valStr.replace(',', '.'));
   if (isNaN(valor) || valor < 0) {
-    return alert("Valor inválido. Tente novamente.");
+    return showAlert("Erro", "Valor inválido. Tente novamente.");
   }
 
   try {
@@ -414,7 +464,8 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 async function cancelarAgendamentoPublico(token) {
-  if (!confirm("Tem certeza que deseja cancelar este agendamento?")) return;
+  const ok = await showConfirm("Cancelar Agendamento", "Tem certeza que deseja cancelar este agendamento?");
+  if (!ok) return;
   
   const btn = document.getElementById('btn-cancelar-publico');
   if (btn) btn.disabled = true;
@@ -433,7 +484,8 @@ async function cancelarAgendamentoPublico(token) {
 }
 
 async function solicitarCancelamentoBarbeiro(id, dataStr) {
-  if (!confirm("Deseja cancelar este atendimento?")) return;
+  const ok = await showConfirm("Cancelar Atendimento", "Deseja realmente cancelar este atendimento?");
+  if (!ok) return;
   try {
     await apiFetch(`/api/atendimentos/${id}/cancelar`, { method: 'POST' });
     showToast('Atendimento cancelado.', 'success');
