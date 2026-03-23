@@ -194,6 +194,7 @@ def init_db():
                 data        DATE    NOT NULL DEFAULT CURRENT_DATE,
                 hora        TEXT,
                 status      TEXT    DEFAULT 'agendado',
+                cancel_token TEXT,
                 criado_em   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )""")
     else:

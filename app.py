@@ -1,8 +1,10 @@
 import os
 import secrets
+import sqlite3
+import uuid
 import random
 import string
-from datetime import date, timedelta, datetime
+from datetime import datetime, date, timedelta
 from functools import wraps
 
 from flask import (Flask, render_template, request, jsonify,
@@ -375,6 +377,12 @@ def api_dashboard():
         (limite_inativo, b_id)
     ).fetchall()
 
+    hoje = date.today().isoformat() # Moved and changed to isoformat()
+    cancelados_hoje = db.execute(
+        "SELECT COUNT(*) AS c FROM atendimentos WHERE status='cancelado' AND data=? AND barbearia_id=CAST(? AS INTEGER)",
+        (hoje, b_id)
+    ).fetchone()['c']
+
     def format_row(r):
         d = dict(r)
         for k, v in d.items():
@@ -387,6 +395,7 @@ def api_dashboard():
         'atendimentos_mes': atendimentos_mes,
         'clientes_ativos': ativos,
         'clientes_inativos': inativos,
+        'cancelados_hoje': cancelados_hoje,
         'lista_inativos': [format_row(r) for r in lista_inativos]
     })
 
@@ -586,10 +595,27 @@ def api_public_agendar():
         cliente_id = cur_c.lastrowid
 
     # Agendar
+    token = str(uuid.uuid4())
     db.execute(
-        "INSERT INTO atendimentos(barbearia_id, cliente_id, usuario_id, servico, valor, data, hora, status) VALUES(?,?,?,?,?,?,?,?)",
-        (b_id, cliente_id, int(barbeiro_id), servico, 0.0, data_atend, hora, 'agendado')
+        "INSERT INTO atendimentos(barbearia_id, cliente_id, usuario_id, servico, valor, data, hora, status, cancel_token) VALUES(?,?,?,?,?,?,?,?,?)",
+        (b_id, cliente_id, int(barbeiro_id), servico, 0.0, data_atend, hora, 'agendado', token)
     )
+    db.commit()
+    db.close()
+    return jsonify({'ok': True, 'cancel_token': token})
+
+
+@app.route('/api/public/cancelar/<token>', methods=['POST'])
+@log_errors
+def api_public_cancelar(token):
+    db = get_db()
+    # Find the appointment by token
+    atend = db.execute("SELECT id, barbearia_id FROM atendimentos WHERE cancel_token=?", (token,)).fetchone()
+    if not atend:
+        db.close()
+        return jsonify({'erro': 'Agendamento não encontrado ou já cancelado.'}), 404
+    
+    db.execute("UPDATE atendimentos SET status='cancelado' WHERE cancel_token=?", (token,))
     db.commit()
     db.close()
     return jsonify({'ok': True})
@@ -618,6 +644,18 @@ def api_atendimento_concluir(atend_id):
         db.execute("UPDATE clientes SET ultima_visita=? WHERE id=? AND barbearia_id=? AND (ultima_visita IS NULL OR ultima_visita < ?)",
                    (atend['data'], atend['cliente_id'], b_id, atend['data']))
                    
+    db.commit()
+    db.close()
+    return jsonify({'ok': True})
+
+
+@app.route('/api/atendimentos/<int:atend_id>/cancelar', methods=['POST'])
+@login_required
+@log_errors
+def api_atendimento_cancelar(atend_id):
+    db = get_db()
+    b_id = current_user.barbearia_id
+    db.execute("UPDATE atendimentos SET status='cancelado' WHERE id=? AND barbearia_id=?", (atend_id, b_id))
     db.commit()
     db.close()
     return jsonify({'ok': True})

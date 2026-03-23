@@ -264,25 +264,33 @@ async function loadAgenda(dataStr) {
       tbody.innerHTML = `<tr><td colspan="5" class="empty-state">Nenhum compromisso marcado.</td></tr>`;
       return;
     }
-    tbody.innerHTML = list.map(a => {
+    let html = '';
+    list.map(a => {
       const isConcluido = a.status === 'concluido';
-      const statusBadge = isConcluido 
-        ? `<span class="badge badge-success" style="font-size:0.75rem">Concluído</span>`
-        : `<span class="badge badge-gold" style="font-size:0.75rem">Agendado</span>`;
-      
-      const actionBtn = isConcluido
-        ? `<span style="color:var(--success)">✅</span>`
-        : `<button class="btn btn-sm btn-outline" style="padding:4px 8px;font-size:0.8rem;white-space:nowrap" onclick="concluirAtendimento(${a.id}, '${dataStr}')">✔️ Concluir</button>`;
+      const isCancelled = a.status === 'cancelado';
+      const statusClass = isCancelled ? 'opacity-50 line-through' : '';
+      const actionBtn = isCancelled 
+        ? '<span class="text-xs text-red-500 font-bold">CANCELADO</span>'
+        : `<div class="flex gap-2">
+            <button class="btn btn-sm btn-outline" style="padding:4px 8px;font-size:0.8rem;white-space:nowrap" onclick="concluirAtendimento(${a.id}, '${dataStr}')">✔️ Concluir</button>
+            <button class="btn btn-sm btn-outline border-red-900 text-red-500" style="padding:4px 8px;font-size:0.8rem;white-space:nowrap" onclick="solicitarCancelamentoBarbeiro(${a.id}, '${dataStr}')">❌</button>
+           </div>`;
 
       let wppBtn = '';
-      if (!isConcluido && a.cliente_telefone) {
+      if (!isConcluido && !isCancelled && a.cliente_telefone) {
         let msg = `Olá ${a.cliente_nome.split(' ')[0]}! Passando pra avisar que seu horário de ${a.servico} está confirmado hoje às ${a.hora}. Te espero aqui!`;
         let wLink = formatWppLink(a.cliente_telefone, msg);
         wppBtn = `<a href="${wLink}" target="_blank" class="btn btn-sm btn-success" style="padding:4px 8px;font-size:0.8rem;margin-left:4px;text-decoration:none" title="Enviar Lembrete">💬 Wpp</a>`;
       }
 
-      return `
-      <tr style="${isConcluido ? 'opacity:0.6' : ''}">
+      const statusBadge = isConcluido
+        ? `<span class="badge badge-success" style="font-size:0.75rem">Concluído</span>`
+        : isCancelled
+          ? `<span class="badge badge-danger" style="font-size:0.75rem">Cancelado</span>`
+          : `<span class="badge badge-gold" style="font-size:0.75rem">Agendado</span>`;
+
+      html += `
+      <tr style="${isConcluido ? 'opacity:0.6' : ''} ${isCancelled ? 'opacity:0.5; text-decoration:line-through;' : ''}">
         <td style="font-weight:600;color:var(--gold)">${a.hora || '—'}</td>
         <td><strong>${esc(a.cliente_nome)}</strong></td>
         <td>
@@ -293,6 +301,7 @@ async function loadAgenda(dataStr) {
         <td>${actionBtn}${wppBtn}</td>
       </tr>`;
     }).join('');
+    tbody.innerHTML = html;
   } catch (e) {
     showToast('Erro Agenda: ' + e.message, 'error');
   }
@@ -404,4 +413,34 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-console.log("App Version: 2.0 - Date fixes applied");
+async function cancelarAgendamentoPublico(token) {
+  if (!confirm("Tem certeza que deseja cancelar este agendamento?")) return;
+  
+  const btn = document.getElementById('btn-cancelar-publico');
+  if (btn) btn.disabled = true;
+
+  try {
+    await apiFetch(`/api/public/cancelar/${token}`, { method: 'POST' });
+    showToast('Agendamento cancelado com sucesso!', 'success');
+    setTimeout(() => {
+      // Repristina o container original ou recarrega
+      location.reload();
+    }, 1500);
+  } catch (e) {
+    showToast('Erro ao cancelar: ' + e.message, 'error');
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function solicitarCancelamentoBarbeiro(id, dataStr) {
+  if (!confirm("Deseja cancelar este atendimento?")) return;
+  try {
+    await apiFetch(`/api/atendimentos/${id}/cancelar`, { method: 'POST' });
+    showToast('Atendimento cancelado.', 'success');
+    loadAgenda(dataStr);
+  } catch (e) {
+    showToast('Erro ao cancelar: ' + e.message, 'error');
+  }
+}
+
+console.log("App Version: 2.1 - Client-side cancellation & Dashboard KPI");
