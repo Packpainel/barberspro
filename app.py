@@ -436,6 +436,10 @@ def api_clientes():
         telefone = (data.get('telefone') or '').strip()
         if not nome:
             return jsonify({'erro': 'Nome é obrigatório'}), 400
+        # Validar tamanho do telefone
+        telefone_limpo = ''.join(c for c in telefone if c.isdigit())
+        if telefone_limpo and len(telefone_limpo) > 11:
+            return jsonify({'erro': 'Número de telefone inválido (máximo 11 dígitos)'}), 400
             
         cur = db.execute(
             "INSERT INTO clientes(barbearia_id, nome, telefone) VALUES(?,?,?)", 
@@ -492,6 +496,10 @@ def api_cliente_detalhe(cid):
         telefone = (data.get('telefone') or '').strip()
         if not nome:
             return jsonify({'erro': 'Nome é obrigatório'}), 400
+        # Validar tamanho do telefone
+        telefone_limpo = ''.join(c for c in telefone if c.isdigit())
+        if telefone_limpo and len(telefone_limpo) > 11:
+            return jsonify({'erro': 'Número de telefone inválido (máximo 11 dígitos)'}), 400
         db.execute("UPDATE clientes SET nome=?, telefone=? WHERE id=? AND barbearia_id=?", (nome, telefone, cid, b_id))
         db.commit()
         db.close()
@@ -646,6 +654,49 @@ def api_public_cancelar(token):
     db.commit()
     db.close()
     return jsonify({'ok': True})
+
+
+@app.route('/api/public/meus-agendamentos')
+@log_errors
+def api_public_meus_agendamentos():
+    telefone = (request.args.get('telefone') or '').strip()
+    codigo = (request.args.get('codigo') or '').strip()
+    if not telefone or not codigo:
+        return jsonify([]), 200
+
+    db = get_db()
+    b = db.execute("SELECT id FROM barbearias WHERE codigo=?", (codigo,)).fetchone()
+    if not b:
+        db.close()
+        return jsonify([]), 200
+    b_id = b['id']
+
+    # Buscar cliente pelo telefone
+    cliente = db.execute("SELECT id FROM clientes WHERE telefone=? AND barbearia_id=?", (telefone, b_id)).fetchone()
+    if not cliente:
+        db.close()
+        return jsonify([]), 200
+
+    hoje = date.today().isoformat()
+    rows = db.execute(
+        """SELECT a.id, a.servico, a.data, a.hora, a.status, a.cancel_token,
+                  u.nome AS barbeiro_nome
+           FROM atendimentos a
+           LEFT JOIN usuarios u ON u.id = a.usuario_id
+           WHERE a.cliente_id=? AND a.barbearia_id=? AND a.data >= ? AND a.status != 'cancelado'
+           ORDER BY a.data ASC, a.hora ASC""",
+        (cliente['id'], b_id, hoje)
+    ).fetchall()
+
+    def fmt(r):
+        d = dict(r)
+        for k, v in d.items():
+            if v and hasattr(v, 'isoformat'):
+                d[k] = v.isoformat()
+        return d
+
+    db.close()
+    return jsonify([fmt(r) for r in rows])
 
 
 # ─────────────────────────────────────────────
@@ -813,6 +864,34 @@ def api_barbeiro_delete(uid):
         return jsonify({'erro': 'Você não pode remover a si mesmo'}), 400
     db = get_db()
     db.execute("UPDATE usuarios SET ativo=0 WHERE id=? AND barbearia_id=?", (uid, current_user.barbearia_id))
+    db.commit()
+    db.close()
+    return jsonify({'ok': True})
+
+
+# ─────────────────────────────────────────────
+# API — Alterar Senha
+# ─────────────────────────────────────────────
+@app.route('/api/alterar-senha', methods=['POST'])
+@login_required
+@log_errors
+def api_alterar_senha():
+    data = request.get_json() or {}
+    senha_atual = data.get('senha_atual', '')
+    nova_senha = data.get('nova_senha', '')
+
+    if not senha_atual or not nova_senha:
+        return jsonify({'erro': 'Preencha todos os campos'}), 400
+    if len(nova_senha) < 6:
+        return jsonify({'erro': 'A nova senha deve ter pelo menos 6 caracteres'}), 400
+
+    db = get_db()
+    row = db.execute("SELECT senha_hash FROM usuarios WHERE id=?", (current_user.id,)).fetchone()
+    if not row or not check_password_hash(row['senha_hash'], senha_atual):
+        db.close()
+        return jsonify({'erro': 'Senha atual incorreta'}), 403
+
+    db.execute("UPDATE usuarios SET senha_hash=? WHERE id=?", (generate_password_hash(nova_senha), current_user.id))
     db.commit()
     db.close()
     return jsonify({'ok': True})

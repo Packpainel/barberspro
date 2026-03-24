@@ -147,6 +147,7 @@ async function loadDashboard() {
         <td>
           ${c.telefone ? `<a class="btn btn-sm btn-success" style="padding:4px 8px;font-size:0.8rem;text-decoration:none" href="${wpp}" target="_blank">📱 Wpp</a>` : '—'}
         </td>
+        <td style="color:var(--danger);font-weight:600">${c.dias_ausente || '?'} dias</td>
       </tr>`;
     }).join('');
   } catch (e) {
@@ -319,12 +320,14 @@ async function loadAgenda(dataStr) {
       const isConcluido = a.status === 'concluido';
       const isCancelled = a.status === 'cancelado';
       const statusClass = isCancelled ? 'opacity-50 line-through' : '';
-      const actionBtn = isCancelled 
-        ? '<span class="text-xs text-red-500 font-bold">CANCELADO</span>'
-        : `<div class="flex gap-2">
-            <button class="btn btn-sm btn-outline" style="padding:4px 8px;font-size:0.8rem;white-space:nowrap" onclick="concluirAtendimento(${a.id}, '${dataStr}')">✔️ Concluir</button>
-            <button class="btn btn-sm btn-outline border-red-900 text-red-500" style="padding:4px 8px;font-size:0.8rem;white-space:nowrap" onclick="solicitarCancelamentoBarbeiro(${a.id}, '${dataStr}')">❌</button>
-           </div>`;
+      const actionBtn = isConcluido
+        ? '<span style="color:var(--success);font-weight:bold;font-size:0.85rem">✅ Concluído</span>'
+        : isCancelled 
+          ? '<span style="color:var(--danger);font-weight:bold;font-size:0.85rem">CANCELADO</span>'
+          : `<div class="flex gap-2">
+              <button class="btn btn-sm btn-outline" style="padding:4px 8px;font-size:0.8rem;white-space:nowrap" onclick="concluirAtendimento(${a.id}, '${dataStr}')">✔️ Concluir</button>
+              <button class="btn btn-sm btn-outline border-red-900 text-red-500" style="padding:4px 8px;font-size:0.8rem;white-space:nowrap" onclick="solicitarCancelamentoBarbeiro(${a.id}, '${dataStr}')">❌</button>
+             </div>`;
 
       let wppBtn = '';
       if (!isConcluido && !isCancelled && a.cliente_telefone) {
@@ -474,7 +477,6 @@ async function cancelarAgendamentoPublico(token) {
     await apiFetch(`/api/public/cancelar/${token}`, { method: 'POST' });
     showToast('Agendamento cancelado com sucesso!', 'success');
     setTimeout(() => {
-      // Repristina o container original ou recarrega
       location.reload();
     }, 1500);
   } catch (e) {
@@ -495,4 +497,67 @@ async function solicitarCancelamentoBarbeiro(id, dataStr) {
   }
 }
 
-console.log("App Version: 2.1 - Client-side cancellation & Dashboard KPI");
+/* ══════════════════════════════════════════════
+   ALTERAR SENHA
+══════════════════════════════════════════════ */
+function abrirAlterarSenha() {
+  const modal = document.getElementById('modalSenha');
+  if (modal) {
+    document.getElementById('senha-atual').value = '';
+    document.getElementById('nova-senha').value = '';
+    modal.classList.add('active');
+  }
+}
+
+function fecharModalSenha() {
+  const modal = document.getElementById('modalSenha');
+  if (modal) modal.classList.remove('active');
+}
+
+async function salvarNovaSenha() {
+  const senhaAtual = document.getElementById('senha-atual').value;
+  const novaSenha = document.getElementById('nova-senha').value;
+
+  if (!senhaAtual || !novaSenha) {
+    showToast('Preencha todos os campos', 'error');
+    return;
+  }
+  if (novaSenha.length < 6) {
+    showToast('A nova senha deve ter pelo menos 6 caracteres', 'error');
+    return;
+  }
+
+  const btn = document.getElementById('btn-salvar-senha');
+  btn.disabled = true;
+  btn.textContent = 'Salvando…';
+
+  try {
+    await apiFetch('/api/alterar-senha', {
+      method: 'POST',
+      body: JSON.stringify({ senha_atual: senhaAtual, nova_senha: novaSenha })
+    });
+    showToast('Senha alterada com sucesso! 🔒', 'success');
+    fecharModalSenha();
+  } catch (e) {
+    showToast(e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Salvar';
+  }
+}
+
+/* ══════════════════════════════════════════════
+   MÁSCARA DE TELEFONE (Clientes)
+══════════════════════════════════════════════ */
+document.addEventListener('DOMContentLoaded', () => {
+  const telInput = document.getElementById('telefone');
+  if (telInput) {
+    telInput.maxLength = 15;
+    telInput.addEventListener('input', function (e) {
+      let x = e.target.value.replace(/\D/g, '').match(/(\d{0,2})(\d{0,5})(\d{0,4})/);
+      e.target.value = !x[2] ? x[1] : '(' + x[1] + ') ' + x[2] + (x[3] ? '-' + x[3] : '');
+    });
+  }
+});
+
+console.log("App Version: 3.0 - Bug fixes & new features");

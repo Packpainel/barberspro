@@ -27,68 +27,7 @@
           <span class="badge badge-gold" style="font-size:.6rem;padding:2px 7px">Admin</span>
         {% endif %}
       </span>
-      <a href="/logout" class="btn-logout" title="Sair">⏻</a>
-    </div>
-  </header>
-
-  <!-- Page content -->
-  <main class="container">
-    {% block content %}{% endblock %}
-  </main>
-
-  <!-- Bottom navigation -->
-  <nav class="bottom-nav">
-    <a href="/" class="nav-item">
-      <span class="nav-icon">📊</span>
-      <span>Dashboard</span>
-    </a>
-    <a href="/clientes" class="nav-item">
-      <span class="nav-icon">👤</span>
-      <span>Clientes</span>
-    </a>
-    <a href="/novo-atendimento" class="nav-item">
-      <span class="nav-icon">✂️</span>
-      <span>Atender</span>
-    </a>
-    <a href="/agenda" class="nav-item">
-      <span class="nav-icon">📅</span>
-      <span>Agenda</span>
-    </a>
-    <a href="/historico" class="nav-item">
-      <span class="nav-icon">📋</span>
-      <span>Histórico</span>
-    </a>
-    {% if current_user.is_admin %}
-    <a href="/admin/barbeiros" class="nav-item">
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>{% block title %}{{ current_user.barbearia_nome if current_user.is_authenticated else 'BarberPro' }}{% endblock %}</title>
-  <meta name="description" content="Sistema de gestão para barbearias — clientes e faturamento." />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>✂️</text></svg>">
-  <link rel="stylesheet" href="/style.css" />
-  {% block extra_head %}{% endblock %}
-</head>
-<body>
-
-  <!-- Top header -->
-  <header class="app-header">
-    <span style="font-size:1.5rem">✂️</span>
-    <span class="logo">{{ current_user.barbearia_nome if current_user.is_authenticated else 'BarberPro' }}</span>
-
-    <div class="header-user">
-      <span class="user-chip">
-        <span class="user-avatar">{{ current_user.nome[0].upper() }}</span>
-        <span class="user-name">{{ current_user.nome.split()[0] }}</span>
-        {% if current_user.is_admin %}
-          <span class="badge badge-gold" style="font-size:.6rem;padding:2px 7px">Admin</span>
-        {% endif %}
-      </span>
+      <button onclick="abrirAlterarSenha()" class="btn-logout" title="Alterar Senha" style="font-size:1rem;margin-right:2px">🔑</button>
       <a href="/logout" class="btn-logout" title="Sair">⏻</a>
     </div>
   </header>
@@ -141,7 +80,26 @@
     </div>
   </div>
 
-  <script src="/main.js?v=2.0"></script>
+  <!-- Modal Alterar Senha -->
+  <div id="modalSenha" class="modal-backdrop">
+    <div class="modal-content">
+      <h3 class="modal-title">🔑 Alterar Senha</h3>
+      <div class="form-group" style="margin-bottom:16px">
+        <label class="form-label" for="senha-atual">Senha Atual</label>
+        <input type="password" id="senha-atual" class="form-control" placeholder="••••••••" />
+      </div>
+      <div class="form-group" style="margin-bottom:20px">
+        <label class="form-label" for="nova-senha">Nova Senha (mín. 6 caracteres)</label>
+        <input type="password" id="nova-senha" class="form-control" placeholder="••••••••" />
+      </div>
+      <div class="modal-actions">
+        <button class="btn-modal btn-modal-cancel" onclick="fecharModalSenha()">Cancelar</button>
+        <button class="btn-modal btn-modal-confirm" id="btn-salvar-senha" onclick="salvarNovaSenha()">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/main.js?v=3.0"></script>
   {% block extra_js %}{% endblock %}
 </body>
 </html>

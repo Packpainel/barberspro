@@ -84,6 +84,21 @@
     <p style="font-size:1.1rem; color:#ccc; line-height:1.6">Seu horário foi reservado com sucesso.<br><br>Te esperamos lá na barbearia! Qualquer problema, avise a equipe pra liberar a vaga.</p>
   </div>
 
+  <!-- Meus Agendamentos -->
+  <div class="section-card" id="meus-agendamentos-section" style="text-align:left; padding:24px; margin-top:24px">
+    <div class="section-header" style="text-align:center; font-size:1.3rem; margin-bottom:20px">📅 Meus Agendamentos</div>
+    <div class="form-group" style="margin-bottom:16px">
+      <label class="form-label" style="text-align:center; display:block">Digite seu WhatsApp para ver seus horários:</label>
+      <div style="display:flex; gap:8px">
+        <input type="tel" id="busca-tel" class="form-control" placeholder="(00) 00000-0000" maxlength="15" style="flex:1; font-size:1.1rem; padding:12px" />
+        <button type="button" id="btn-buscar-agendamentos" class="btn btn-gold" style="padding:12px 20px; white-space:nowrap" onclick="buscarMeusAgendamentos()">🔍 Buscar</button>
+      </div>
+    </div>
+    <div id="lista-meus-agendamentos" style="margin-top:16px">
+      <div style="text-align:center; color:#888; padding:20px; font-size:0.9rem">Digite seu número acima para consultar.</div>
+    </div>
+  </div>
+
   <script>
     const cod = document.getElementById('codigo').value;
     const inpData = document.getElementById('data-agend');
@@ -168,6 +183,8 @@
       btnSubmit.disabled = true;
       btnSubmit.textContent = 'Reservando horário...';
 
+      const telefoneCliente = document.getElementById('cli-tel').value;
+
       try {
         const res = await fetch('/api/public/agendar', {
           method: 'POST',
@@ -176,7 +193,7 @@
             codigo: cod,
             barbeiro_id: hBarbeiro.value,
             nome: document.getElementById('cli-nome').value,
-            telefone: document.getElementById('cli-tel').value,
+            telefone: telefoneCliente,
             servico: hServico.value,
             data: inpData.value,
             hora: hHora.value
@@ -184,10 +201,13 @@
         });
         const result = await res.json();
         if(result.ok) {
-          document.querySelector('.section-card').style.display = 'none';
+          document.querySelector('.section-card:first-of-type').style.display = 'none';
           document.querySelector('.header-logo').style.display = 'none';
           document.querySelector('.shop-name').style.display = 'none';
           document.getElementById('success-screen').style.display = 'block';
+          // Preencher auto o telefone e buscar agendamentos
+          document.getElementById('busca-tel').value = telefoneCliente;
+          buscarMeusAgendamentos();
         } else {
           alert(result.erro || 'Erro ao agendar.');
           btnSubmit.disabled = false;
@@ -200,11 +220,92 @@
       }
     });
 
-    // Simple Mask for phone
-    document.getElementById('cli-tel').addEventListener('input', function (e) {
-      let x = e.target.value.replace(/\D/g, '').match(/(\d{0,2})(\d{0,5})(\d{0,4})/);
-      e.target.value = !x[2] ? x[1] : '(' + x[1] + ') ' + x[2] + (x[3] ? '-' + x[3] : '');
-    });
+    // Máscara de telefone nos dois inputs
+    function aplicarMascara(input) {
+      input.addEventListener('input', function (e) {
+        let x = e.target.value.replace(/\D/g, '').match(/(\d{0,2})(\d{0,5})(\d{0,4})/);
+        e.target.value = !x[2] ? x[1] : '(' + x[1] + ') ' + x[2] + (x[3] ? '-' + x[3] : '');
+      });
+    }
+    aplicarMascara(document.getElementById('cli-tel'));
+    aplicarMascara(document.getElementById('busca-tel'));
+
+    // Formata data para dd/mm/aaaa
+    function fmtDate(d) {
+      if (!d) return '—';
+      const [y, m, dd] = d.split('-');
+      return `${dd}/${m}/${y}`;
+    }
+
+    // Buscar agendamentos do cliente
+    async function buscarMeusAgendamentos() {
+      const tel = document.getElementById('busca-tel').value.trim();
+      const container = document.getElementById('lista-meus-agendamentos');
+      if (!tel) {
+        container.innerHTML = '<div style="text-align:center; color:#888; padding:20px; font-size:0.9rem">Digite seu número acima para consultar.</div>';
+        return;
+      }
+
+      container.innerHTML = '<div style="text-align:center; padding:20px; color:#aaa">Buscando...</div>';
+
+      try {
+        const res = await fetch(`/api/public/meus-agendamentos?telefone=${encodeURIComponent(tel)}&codigo=${cod}`);
+        const agendamentos = await res.json();
+
+        if (!agendamentos.length) {
+          container.innerHTML = '<div style="text-align:center; padding:20px; color:#888; font-size:0.95rem">📭 Nenhum agendamento futuro encontrado para esse número.</div>';
+          return;
+        }
+
+        container.innerHTML = agendamentos.map(a => {
+          const statusBadge = a.status === 'concluido'
+            ? '<span style="background:#1a7a1a; color:#fff; padding:3px 10px; border-radius:6px; font-size:0.75rem; font-weight:600">Concluído</span>'
+            : '<span style="background:var(--gold); color:#000; padding:3px 10px; border-radius:6px; font-size:0.75rem; font-weight:600">Agendado</span>';
+
+          const barbNome = a.barbeiro_nome ? a.barbeiro_nome.split(' ')[0] : 'Barbeiro';
+          const msgWpp = `Olá ${barbNome}, tudo bem? Preciso avisar que infelizmente não vou conseguir ir no meu horário de ${a.servico} no dia ${fmtDate(a.data)} às ${a.hora}. Desculpa pelo imprevisto!`;
+          
+          // Montar link WhatsApp (usa telefone genérico pois não temos o do barbeiro facilmente)
+          const cancelBtn = a.status === 'agendado' && a.cancel_token
+            ? `<div style="display:flex; gap:8px; margin-top:12px; flex-wrap:wrap">
+                <button onclick="cancelarAgendPublico('${a.cancel_token}')" class="btn btn-sm" style="flex:1;min-width:120px;padding:10px;background:#c0392b;color:#fff;border:none;border-radius:8px;font-weight:600;cursor:pointer;font-size:0.85rem">❌ Cancelar</button>
+                <a href="https://wa.me/?text=${encodeURIComponent(msgWpp)}" target="_blank" class="btn btn-sm" style="flex:1;min-width:120px;padding:10px;background:#25d366;color:#fff;border:none;border-radius:8px;font-weight:600;text-decoration:none;text-align:center;font-size:0.85rem">💬 Avisar no Wpp</a>
+              </div>`
+            : '';
+
+          return `
+          <div style="background:#1a1a1a; border:1px solid #333; border-radius:12px; padding:16px; margin-bottom:12px">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">
+              <span style="color:var(--gold); font-weight:700; font-size:1.1rem">${fmtDate(a.data)} — ${a.hora || '—'}</span>
+              ${statusBadge}
+            </div>
+            <div style="color:#ccc; font-size:0.95rem">
+              <strong>${a.servico}</strong> com <strong>${barbNome}</strong>
+            </div>
+            ${cancelBtn}
+          </div>`;
+        }).join('');
+      } catch(e) {
+        container.innerHTML = '<div style="text-align:center; padding:20px; color:var(--danger)">Erro ao buscar agendamentos.</div>';
+      }
+    }
+
+    async function cancelarAgendPublico(token) {
+      if (!confirm('Tem certeza que deseja cancelar este agendamento?')) return;
+      try {
+        const res = await fetch(`/api/public/cancelar/${token}`, { method: 'POST', headers: {'Content-Type': 'application/json'} });
+        const data = await res.json();
+        if (data.ok) {
+          alert('Agendamento cancelado com sucesso!');
+          buscarMeusAgendamentos();
+        } else {
+          alert(data.erro || 'Erro ao cancelar.');
+        }
+      } catch(e) {
+        alert('Erro de conexão.');
+      }
+    }
   </script>
 </body>
 </html>
+
