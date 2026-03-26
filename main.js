@@ -126,6 +126,7 @@ async function loadDashboard() {
 
   try {
     const d = await apiFetch('/api/dashboard');
+    console.log("Dashboard Data:", d);
 
     el('kpi-faturamento').textContent  = formatBRL(d.faturamento_mes);
     el('kpi-atendimentos').textContent = d.atendimentos_mes;

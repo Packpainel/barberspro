@@ -507,14 +507,15 @@ def api_dashboard():
         ).fetchone()['c']
 
         # Inativos: Visitaram há mais de 30 dias OU nunca visitaram e o cadastro é antigo
-        inativos = db.execute(
-            "SELECT COUNT(*) AS c FROM clientes "
-            "WHERE barbearia_id=? AND ("
-            "  (ultima_visita IS NOT NULL AND ultima_visita < CAST(? AS DATE)) OR "
-            "  (ultima_visita IS NULL AND criado_em < CAST(? AS TIMESTAMP))"
-            ")",
-            (b_id, limite_inativo, limite_inativo)
-        ).fetchone()['c']
+        sql_count = "SELECT COUNT(*) AS c FROM clientes WHERE barbearia_id=? AND ((ultima_visita IS NOT NULL AND ultima_visita < ?) OR (ultima_visita IS NULL AND criado_em < ?))"
+        if is_pg:
+            params_count = (b_id, limite_inativo, limite_inativo)
+            # No PG precisamos dar cast explicitamente se for string vindo do py
+            sql_count = "SELECT COUNT(*) AS c FROM clientes WHERE barbearia_id=%s AND ((ultima_visita IS NOT NULL AND ultima_visita < %s::date) OR (ultima_visita IS NULL AND criado_em < %s::timestamp))"
+        else:
+            params_count = (b_id, limite_inativo, limite_inativo)
+            
+        inativos = db.execute(sql_count, params_count).fetchone()['c']
 
         if is_pg:
             lista_inativos = db.execute(
@@ -542,7 +543,7 @@ def api_dashboard():
                    FROM clientes c
                    WHERE c.barbearia_id=? AND (
                      (c.ultima_visita IS NOT NULL AND c.ultima_visita < ?) OR
-                     (c.ultima_visita IS NULL AND criado_em < ?)
+                     (c.ultima_visita IS NULL AND c.criado_em < ?)
                    )
                    ORDER BY dias_ausente DESC
                    LIMIT 20""",
