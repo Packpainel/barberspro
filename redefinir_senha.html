@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <link rel="icon" type="image/png" href="logoapp.png">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Redefinir senha — BarberPro</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body class="auth-body">
+
+  <div class="auth-card">
+    <div class="auth-logo">
+      <span style="font-size:2.5rem">🔐</span>
+      <div class="auth-logo-text">Barber<span>Pro</span></div>
+      <div class="auth-subtitle">Olá <strong>{{ nome }}</strong>, crie sua nova senha</div>
+    </div>
+
+    {% with msgs = get_flashed_messages(with_categories=true) %}
+      {% for cat, msg in msgs %}
+        <div class="alert-{{ 'error' if cat == 'error' else 'success' }}">{{ msg }}</div>
+      {% endfor %}
+    {% endwith %}
+
+    <form method="POST" action="/redefinir-senha/{{ token }}" autocomplete="off" id="form-nova-senha">
+      <div class="form-group">
+        <label class="form-label" for="nova_senha">Nova Senha</label>
+        <div class="password-wrap">
+          <input class="form-control" type="password" id="nova_senha" name="nova_senha"
+                 placeholder="••••••••" required minlength="6" autocomplete="new-password" />
+          <button type="button" class="show-pwd" onclick="togglePwd('nova_senha')" title="Mostrar senha">👁</button>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="confirmar_senha">Confirmar Senha</label>
+        <div class="password-wrap">
+          <input class="form-control" type="password" id="confirmar_senha" name="confirmar_senha"
+                 placeholder="••••••••" required minlength="6" autocomplete="new-password" />
+          <button type="button" class="show-pwd" onclick="togglePwd('confirmar_senha')" title="Mostrar senha">👁</button>
+        </div>
+      </div>
+
+      <button class="btn btn-gold btn-full" type="submit" id="btn-salvar" style="padding:16px;margin-top:8px">
+        🔒 Redefinir Senha
+      </button>
+    </form>
+
+    <div class="divider" style="margin:28px 0 20px"></div>
+
+    <div style="text-align:center">
+      <a href="/login" style="color:var(--gold); text-decoration:none; font-size:0.9rem; font-weight:600">
+        ← Voltar para o Login
+      </a>
+    </div>
+  </div>
+
+  <script>
+    function togglePwd(fieldId) {
+      const i = document.getElementById(fieldId);
+      i.type = i.type === 'password' ? 'text' : 'password';
+    }
+    document.getElementById('form-nova-senha')?.addEventListener('submit', function() {
+      const btn = document.getElementById('btn-salvar');
+      btn.textContent = 'Salvando…';
+      btn.disabled = true;
+    });
+  </script>
+</body>
+</html>

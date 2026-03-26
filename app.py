@@ -4,6 +4,9 @@ import sqlite3
 import uuid
 import random
 import string
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from datetime import datetime, date, timedelta
 from functools import wraps
 
@@ -281,6 +284,143 @@ def logout():
 
 
 # ─────────────────────────────────────────────
+# ESQUECI MINHA SENHA (Reset por Email)
+# ─────────────────────────────────────────────
+def _send_reset_email(to_email, to_name, reset_link):
+    """Envia email de redefinição de senha via SMTP."""
+    mail_server = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
+    mail_port = int(os.environ.get('MAIL_PORT', '587'))
+    mail_user = os.environ.get('MAIL_USERNAME', '')
+    mail_pass = os.environ.get('MAIL_PASSWORD', '')
+    mail_sender = os.environ.get('MAIL_DEFAULT_SENDER', mail_user)
+
+    if not mail_user or not mail_pass:
+        print("AVISO: MAIL_USERNAME/MAIL_PASSWORD não configurados. Email não enviado.")
+        return False
+
+    msg = MIMEMultipart('alternative')
+    msg['Subject'] = '🔑 Redefinir sua senha — BarberPro'
+    msg['From'] = f'BarberPro <{mail_sender}>'
+    msg['To'] = to_email
+
+    html_body = f"""
+    <div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;background:#111;color:#f4f4f4;padding:32px;border-radius:12px;border:1px solid #2a2a2a">
+      <div style="text-align:center;margin-bottom:24px">
+        <span style="font-size:2rem">✂️</span>
+        <h2 style="color:#C9A84C;margin:8px 0 0">BarberPro</h2>
+      </div>
+      <p>Olá <strong>{to_name}</strong>,</p>
+      <p>Recebemos uma solicitação para redefinir a senha da sua conta.</p>
+      <p style="text-align:center;margin:28px 0">
+        <a href="{reset_link}" style="background:linear-gradient(135deg,#C9A84C,#9A7A2A);color:#080808;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:1rem;display:inline-block">
+          Redefinir Senha
+        </a>
+      </p>
+      <p style="font-size:0.85rem;color:#888">Este link expira em <strong>1 hora</strong>. Se você não solicitou essa alteração, ignore este email.</p>
+      <hr style="border:none;border-top:1px solid #2a2a2a;margin:24px 0">
+      <p style="font-size:0.75rem;color:#666;text-align:center">BarberPro — Sistema de Gestão para Barbearias</p>
+    </div>
+    """
+
+    msg.attach(MIMEText(html_body, 'html'))
+
+    try:
+        with smtplib.SMTP(mail_server, mail_port) as server:
+            server.starttls()
+            server.login(mail_user, mail_pass)
+            server.send_message(msg)
+        print(f"Email de reset enviado para {to_email}")
+        return True
+    except Exception as e:
+        print(f"ERRO ao enviar email: {e}")
+        return False
+
+
+@app.route('/esqueci-senha', methods=['GET', 'POST'])
+def esqueci_senha():
+    if current_user.is_authenticated:
+        return redirect(url_for('index'))
+
+    if request.method == 'POST':
+        email = request.form.get('email', '').strip().lower()
+        # Sempre mostra mensagem de sucesso (segurança: não revelar se email existe)
+        flash('Se este e-mail estiver cadastrado, você receberá um link para redefinir sua senha.', 'success')
+
+        if email:
+            db = get_db()
+            row = db.execute("SELECT id, nome, email FROM usuarios WHERE email=? AND ativo=1", (email,)).fetchone()
+            if row:
+                token = secrets.token_urlsafe(48)
+                expiry = (datetime.now() + timedelta(hours=1)).strftime('%Y-%m-%d %H:%M:%S')
+                db.execute("UPDATE usuarios SET reset_token=?, reset_token_expiry=? WHERE id=?", (token, expiry, row['id']))
+                db.commit()
+
+                app_url = os.environ.get('APP_URL', request.host_url.rstrip('/'))
+                reset_link = f"{app_url}/redefinir-senha/{token}"
+                _send_reset_email(row['email'], row['nome'], reset_link)
+            db.close()
+
+        return redirect(url_for('esqueci_senha'))
+
+    return render_template('esqueci_senha.html')
+
+
+@app.route('/redefinir-senha/<token>', methods=['GET', 'POST'])
+def redefinir_senha(token):
+    if current_user.is_authenticated:
+        return redirect(url_for('index'))
+
+    db = get_db()
+    row = db.execute(
+        "SELECT id, nome FROM usuarios WHERE reset_token=? AND ativo=1", (token,)
+    ).fetchone()
+
+    if not row:
+        db.close()
+        flash('Link inválido ou expirado. Solicite novamente.', 'error')
+        return redirect(url_for('esqueci_senha'))
+
+    # Verificar expiração
+    expiry_row = db.execute("SELECT reset_token_expiry FROM usuarios WHERE id=?", (row['id'],)).fetchone()
+    if expiry_row and expiry_row['reset_token_expiry']:
+        exp_val = expiry_row['reset_token_expiry']
+        if isinstance(exp_val, str):
+            exp_dt = datetime.strptime(exp_val, '%Y-%m-%d %H:%M:%S')
+        else:
+            exp_dt = exp_val
+        if datetime.now() > exp_dt:
+            db.execute("UPDATE usuarios SET reset_token=NULL, reset_token_expiry=NULL WHERE id=?", (row['id'],))
+            db.commit()
+            db.close()
+            flash('Link expirado. Solicite novamente.', 'error')
+            return redirect(url_for('esqueci_senha'))
+
+    if request.method == 'POST':
+        nova_senha = request.form.get('nova_senha', '')
+        confirmar = request.form.get('confirmar_senha', '')
+
+        if len(nova_senha) < 6:
+            flash('A senha deve ter pelo menos 6 caracteres.', 'error')
+            return render_template('redefinir_senha.html', token=token, nome=row['nome'])
+
+        if nova_senha != confirmar:
+            flash('As senhas não conferem.', 'error')
+            return render_template('redefinir_senha.html', token=token, nome=row['nome'])
+
+        db.execute(
+            "UPDATE usuarios SET senha_hash=?, reset_token=NULL, reset_token_expiry=NULL WHERE id=?",
+            (generate_password_hash(nova_senha), row['id'])
+        )
+        db.commit()
+        db.close()
+        flash('Senha redefinida com sucesso! Faça login.', 'success')
+        return redirect(url_for('login'))
+
+    db.close()
+    return render_template('redefinir_senha.html', token=token, nome=row['nome'])
+
+
+# ─────────────────────────────────────────────
 # VIEWS (páginas protegidas)
 # ─────────────────────────────────────────────
 @app.route('/')
@@ -348,6 +488,8 @@ def api_dashboard():
     inicio_mes = hoje.replace(day=1).isoformat()
     limite_inativo = (hoje - timedelta(days=30)).isoformat()
 
+    is_pg = db.is_pg
+
     try:
         row = db.execute(
             "SELECT COALESCE(SUM(valor),0) AS fat, COUNT(*) AS qtd "
@@ -360,7 +502,7 @@ def api_dashboard():
         # Ativos: Visitaram nos últimos 30 dias
         ativos = db.execute(
             "SELECT COUNT(*) AS c FROM clientes "
-            "WHERE barbearia_id=? AND CAST(ultima_visita AS TEXT) >= ?",
+            "WHERE barbearia_id=? AND ultima_visita >= CAST(? AS DATE)",
             (b_id, limite_inativo)
         ).fetchone()['c']
 
@@ -368,27 +510,44 @@ def api_dashboard():
         inativos = db.execute(
             "SELECT COUNT(*) AS c FROM clientes "
             "WHERE barbearia_id=? AND ("
-            "  (CAST(ultima_visita AS TEXT) < ?) OR "
-            "  (ultima_visita IS NULL AND CAST(criado_em AS TEXT) < ?)"
+            "  (ultima_visita IS NOT NULL AND ultima_visita < CAST(? AS DATE)) OR "
+            "  (ultima_visita IS NULL AND criado_em < CAST(? AS TIMESTAMP))"
             ")",
             (b_id, limite_inativo, limite_inativo)
         ).fetchone()['c']
 
-        lista_inativos = db.execute(
-            """SELECT c.id, c.nome, c.telefone, c.ultima_visita,
-                      CASE 
-                        WHEN c.ultima_visita IS NOT NULL THEN CAST(julianday('now') - julianday(CAST(c.ultima_visita AS TEXT)) AS INTEGER)
-                        ELSE CAST(julianday('now') - julianday(CAST(c.criado_em AS TEXT)) AS INTEGER)
-                      END AS dias_ausente
-               FROM clientes c
-               WHERE c.barbearia_id=? AND (
-                 (CAST(c.ultima_visita AS TEXT) < ?) OR
-                 (c.ultima_visita IS NULL AND CAST(c.criado_em AS TEXT) < ?)
-               )
-               ORDER BY dias_ausente DESC
-               LIMIT 20""",
-            (b_id, limite_inativo, limite_inativo)
-        ).fetchall()
+        if is_pg:
+            lista_inativos = db.execute(
+                """SELECT c.id, c.nome, c.telefone, c.ultima_visita,
+                          CASE 
+                            WHEN c.ultima_visita IS NOT NULL THEN (CURRENT_DATE - c.ultima_visita::date)
+                            ELSE (CURRENT_DATE - c.criado_em::date)
+                          END AS dias_ausente
+                   FROM clientes c
+                   WHERE c.barbearia_id=? AND (
+                     (c.ultima_visita IS NOT NULL AND c.ultima_visita < CAST(? AS DATE)) OR
+                     (c.ultima_visita IS NULL AND c.criado_em < CAST(? AS TIMESTAMP))
+                   )
+                   ORDER BY dias_ausente DESC
+                   LIMIT 20""",
+                (b_id, limite_inativo, limite_inativo)
+            ).fetchall()
+        else:
+            lista_inativos = db.execute(
+                """SELECT c.id, c.nome, c.telefone, c.ultima_visita,
+                          CASE 
+                            WHEN c.ultima_visita IS NOT NULL THEN CAST(julianday('now') - julianday(c.ultima_visita) AS INTEGER)
+                            ELSE CAST(julianday('now') - julianday(c.criado_em) AS INTEGER)
+                          END AS dias_ausente
+                   FROM clientes c
+                   WHERE c.barbearia_id=? AND (
+                     (c.ultima_visita IS NOT NULL AND c.ultima_visita < ?) OR
+                     (c.ultima_visita IS NULL AND criado_em < ?)
+                   )
+                   ORDER BY dias_ausente DESC
+                   LIMIT 20""",
+                (b_id, limite_inativo, limite_inativo)
+            ).fetchall()
 
         hoje_str = date.today().isoformat()
         cancelados_hoje = db.execute(

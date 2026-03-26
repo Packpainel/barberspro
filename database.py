@@ -135,7 +135,7 @@ def init_db():
 
         cur.execute("CREATE TABLE IF NOT EXISTS barbearias (id SERIAL PRIMARY KEY, nome TEXT NOT NULL, codigo TEXT NOT NULL UNIQUE, criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
         cur.execute("CREATE TABLE IF NOT EXISTS config (chave TEXT PRIMARY KEY, valor TEXT NOT NULL)")
-        cur.execute("CREATE TABLE IF NOT EXISTS usuarios (id SERIAL PRIMARY KEY, barbearia_id INTEGER REFERENCES barbearias(id), nome TEXT NOT NULL, email TEXT NOT NULL UNIQUE, senha_hash TEXT NOT NULL, is_admin INTEGER NOT NULL DEFAULT 0, ativo INTEGER NOT NULL DEFAULT 1, criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+        cur.execute("CREATE TABLE IF NOT EXISTS usuarios (id SERIAL PRIMARY KEY, barbearia_id INTEGER REFERENCES barbearias(id), nome TEXT NOT NULL, email TEXT NOT NULL UNIQUE, senha_hash TEXT NOT NULL, is_admin INTEGER NOT NULL DEFAULT 0, ativo INTEGER NOT NULL DEFAULT 1, reset_token TEXT, reset_token_expiry TIMESTAMP, criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
         cur.execute("CREATE TABLE IF NOT EXISTS clientes (id SERIAL PRIMARY KEY, barbearia_id INTEGER REFERENCES barbearias(id), nome TEXT NOT NULL, telefone TEXT, ultima_visita DATE, criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
         cur.execute("""
             CREATE TABLE IF NOT EXISTS atendimentos (
@@ -155,16 +155,21 @@ def init_db():
         cur.executescript("""
             CREATE TABLE IF NOT EXISTS barbearias (id INTEGER PRIMARY KEY AUTOINCREMENT, nome TEXT NOT NULL, codigo TEXT NOT NULL UNIQUE, criado_em DATETIME DEFAULT (datetime('now','localtime')));
             CREATE TABLE IF NOT EXISTS config (chave TEXT PRIMARY KEY, valor TEXT NOT NULL);
-            CREATE TABLE IF NOT EXISTS usuarios (id INTEGER PRIMARY KEY AUTOINCREMENT, barbearia_id INTEGER REFERENCES barbearias(id), nome TEXT NOT NULL, email TEXT NOT NULL UNIQUE, senha_hash TEXT NOT NULL, is_admin INTEGER NOT NULL DEFAULT 0, ativo INTEGER NOT NULL DEFAULT 1, criado_em DATETIME DEFAULT (datetime('now','localtime')));
+            CREATE TABLE IF NOT EXISTS usuarios (id INTEGER PRIMARY KEY AUTOINCREMENT, barbearia_id INTEGER REFERENCES barbearias(id), nome TEXT NOT NULL, email TEXT NOT NULL UNIQUE, senha_hash TEXT NOT NULL, is_admin INTEGER NOT NULL DEFAULT 0, ativo INTEGER NOT NULL DEFAULT 1, reset_token TEXT, reset_token_expiry DATETIME, criado_em DATETIME DEFAULT (datetime('now','localtime')));
             CREATE TABLE IF NOT EXISTS clientes (id INTEGER PRIMARY KEY AUTOINCREMENT, barbearia_id INTEGER REFERENCES barbearias(id), nome TEXT NOT NULL, telefone TEXT, ultima_visita DATE, criado_em DATETIME DEFAULT (datetime('now','localtime')));
             CREATE TABLE IF NOT EXISTS atendimentos (id INTEGER PRIMARY KEY AUTOINCREMENT, barbearia_id INTEGER REFERENCES barbearias(id), cliente_id INTEGER NOT NULL REFERENCES clientes(id), usuario_id INTEGER REFERENCES usuarios(id), servico TEXT NOT NULL, valor REAL NOT NULL, data DATE NOT NULL DEFAULT (date('now','localtime')), hora TEXT DEFAULT (time('now','localtime')), status TEXT DEFAULT 'agendado', cancel_token TEXT, criado_em DATETIME DEFAULT (datetime('now','localtime')));
         """)
 
-    # Adiciona a coluna se já existir tabela mas sem ela (Caso de SQLite legado)
-    try:
-        cur.execute("ALTER TABLE atendimentos ADD COLUMN cancel_token TEXT")
-    except:
-        pass
+    # Adiciona colunas se já existir tabela mas sem elas (Caso de migração)
+    for col_sql in [
+        "ALTER TABLE atendimentos ADD COLUMN cancel_token TEXT",
+        "ALTER TABLE usuarios ADD COLUMN reset_token TEXT",
+        "ALTER TABLE usuarios ADD COLUMN reset_token_expiry TIMESTAMP",
+    ]:
+        try:
+            cur.execute(col_sql)
+        except:
+            pass
 
     conn.commit()
     return conn

@@ -78,10 +78,16 @@
     </form>
   </div>
 
-  <div id="success-screen" style="display:none; padding:40px 20px; animation: popIn 0.5s ease out">
+  <div id="success-screen" style="display:none; padding:40px 20px; animation: popIn 0.5s ease">
     <div style="font-size:5rem;margin-bottom:20px">✅</div>
     <h2 style="color:var(--gold); font-size:2rem; margin-bottom:10px">Prontinho!</h2>
     <p style="font-size:1.1rem; color:#ccc; line-height:1.6">Seu horário foi reservado com sucesso.<br><br>Te esperamos lá na barbearia! Qualquer problema, avise a equipe pra liberar a vaga.</p>
+    
+    <div style="margin-top:30px">
+      <button onclick="location.reload()" class="btn btn-outline" style="padding:12px 24px; font-size:0.9rem">
+        🔄 Agendar outro horário
+      </button>
+    </div>
   </div>
 
   <!-- Meus Agendamentos -->
@@ -201,6 +207,7 @@
         });
         const result = await res.json();
         if(result.ok) {
+          alert('✅ Agendamento Confirmado com sucesso!');
           document.querySelector('.section-card:first-of-type').style.display = 'none';
           document.querySelector('.header-logo').style.display = 'none';
           document.querySelector('.shop-name').style.display = 'none';
@@ -208,6 +215,8 @@
           // Preencher auto o telefone e buscar agendamentos
           document.getElementById('busca-tel').value = telefoneCliente;
           buscarMeusAgendamentos();
+          // Resetar slots carregados
+          loadHorarios();
         } else {
           alert(result.erro || 'Erro ao agendar.');
           btnSubmit.disabled = false;
